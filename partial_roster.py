@@ -1,7 +1,7 @@
 import numpy as np
 import copy
 
-from pyNspPattern.helpers import is_weekend, COSTS as cost_elements
+from helpers import is_weekend, COSTS as cost_elements
 
 
 class PartialRoster(object):

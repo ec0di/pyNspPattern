@@ -1,6 +1,6 @@
 from ortools.linear_solver import pywraplp
-import numpy as np
 import time
+from contexttimer import Timer
 
 def model_master(n_days, n_work_shifts, nurse_df, roster_df, binary_plans, demand, t_max_sec, solver_id='GLOP'):  # solver_id='CBC' for MIP or GLOP for LP
     solver = pywraplp.Solver.CreateSolver(solver_id=solver_id)
@@ -9,14 +9,15 @@ def model_master(n_days, n_work_shifts, nurse_df, roster_df, binary_plans, deman
     #roster_indices = [np.arange(len(rosters[nurseType])) for nurseType in nurseTypes]
 
     # Decision Variables
-    z = {}
-    for nurse_type in nurse_df.nurseType.unique():
-        for roster_idx in roster_df[roster_df.nurseType == nurse_type].rosterIndex.values:
-            if solver_id == 'GLOP':
-                z[nurse_type, roster_idx] = solver.NumVar(name=f'z_{nurse_type},{roster_idx}', lb=0, ub=float(nurse_df['nurseCount'].sum()))
-            else: # solver_id == 'CBC'
-                z[nurse_type, roster_idx] = solver.IntVar(name=f'z_{nurse_type},{roster_idx}', lb=0, ub=float(nurse_df['nurseCount'].sum()))
-
+    with Timer() as t:
+        z = {}
+        for nurse_type in nurse_df.nurseType.unique():
+            for roster_idx in roster_df[roster_df.nurseType == nurse_type].rosterIndex.values:
+                if solver_id == 'GLOP':
+                    z[nurse_type, roster_idx] = solver.NumVar(name=f'z_{nurse_type},{roster_idx}', lb=0, ub=float(nurse_df['nurseCount'].sum()))
+                else: # solver_id == 'CBC'
+                    z[nurse_type, roster_idx] = solver.IntVar(name=f'z_{nurse_type},{roster_idx}', lb=0, ub=float(nurse_df['nurseCount'].sum()))
+        print(f'Decision variables created and took: {t.elapsed}')
     #####################
     # Constraints
     nurse_c = dict()  # originally nurse_counts

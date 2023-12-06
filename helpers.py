@@ -18,6 +18,18 @@ COSTS = {
     'weekendShiftsFair': None}
 
 
+def timing(f):
+    @wraps(f)
+    def wrap(*args, **kw):
+        ts = time()
+        result = f(*args, **kw)
+        te = time()
+        print('func:%r args:[%r, %r] took: %2.4f sec' % \
+          (f.__name__, args, kw, te-ts))
+        return result
+    return wrap
+
+
 def list_to_binary_array(plan, n_days, n_work_shifts):
     x = np.zeros((n_days, n_work_shifts))
     for j, e in enumerate(plan):
@@ -171,15 +183,3 @@ def read_rosters_from_parquet(parquet_filename, n_days, n_work_shifts):
         binary_plans[plan.rosterIndex] = list_to_binary_array(plan[:-1], n_days, n_work_shifts)
     print(f'Created binary plans in {round(time() - second_time, 1)} s')
     return roster_df, binary_plans
-
-
-def timing(f):
-    @wraps(f)
-    def wrap(*args, **kw):
-        ts = time()
-        result = f(*args, **kw)
-        te = time()
-        print('func:%r args:[%r, %r] took: %2.4f sec' % \
-          (f.__name__, args, kw, te-ts))
-        return result
-    return wrap

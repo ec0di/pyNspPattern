@@ -2,14 +2,14 @@ import numpy as np
 import pandas as pd
 import copy
 
-from pyNspPattern.master_problem import model_master
-from pyNspPattern.helpers import get_demand, list_to_binary_array, calculate_parameters, read_rosters_from_parquet
-from pyNspPattern.partial_roster import PartialRoster
+from master_problem import model_master
+from helpers import get_demand, list_to_binary_array, calculate_parameters, read_rosters_from_parquet
+from partial_roster import PartialRoster
 
 n_weeks = 1  # works for 1 week with nurse_type from bla
 n_work_shifts = 3
 n_days = n_weeks * 7
-base_path = 'pyNspPattern/'
+base_path = ''
 parquet_filename = f'{base_path}data/{n_weeks}WeekRosters.parquet'
 
 # demand per week
@@ -142,7 +142,7 @@ if status == 0:
 
     # nice to remember: .loc[lambda x: x.nurseType == 2]
     roster_solution_df = roster_df.merge(r_indices_df, how='inner', on=['rosterIndex', 'nurseType'])
-    print(roster_solution_df.loc[:, 0:n_days-1])
+    print(roster_solution_df.loc[:, [str(x) for x in np.arange(n_days)]])
 
 
 # patch 2 rosters together

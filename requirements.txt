@@ -1,0 +1,7 @@
+pandas
+numpy
+ortools
+openpyxl
+pyarrow
+fastparquet
+contexttimer
