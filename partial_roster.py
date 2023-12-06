@@ -95,25 +95,36 @@ class PartialRoster(object):
 
     def feasible_shifts(self):
         day_of_week = np.mod(self.day, 7)
-        a = np.arange(self.n_work_shifts + 1)
+        allowed_shifts = np.arange(self.n_work_shifts + 1)
 
-        if self.day == 0:  # base case, we have not started yet
-            return a
+        if self.day == 0:  # base case, we have no constraints yet
+            return allowed_shifts
 
+        allowed_shifts = self.worked_too_much_constraints(allowed_shifts)
+
+        allowed_shifts = self.worked_too_much_per_week_constraints(allowed_shifts, day_of_week)
+
+        allowed_shifts = self.only_two_shift_types_per_week_constraints(allowed_shifts)
+
+        allowed_shifts = self.last_shift_constraints(allowed_shifts)
+
+        allowed_shifts = self.weekend_per_week_constraints(allowed_shifts, day_of_week)
+
+        return allowed_shifts
+
+    def worked_too_much_constraints(self, allowed_shifts):
         if self.work_shifts_total > self.feasibility_parameters.avg_shifts_per_period[self.nurse_type] + 1 \
                 or self.work_days_consecutive == 5:
-            a = a[a == self.off_shift]
-        if (self.days_off_this_week == 0 and day_of_week == 5) or (self.days_off_this_week == 1 and day_of_week == 6):
-            a = a[a == self.off_shift]
+            allowed_shifts = allowed_shifts[allowed_shifts == self.off_shift]
+        return allowed_shifts
 
-        # we now give work shifts
-        a = self.only_two_shift_types_per_week(a)
+    def worked_too_much_per_week_constraints(self, allowed_shifts, day_of_week):
+        if (self.days_off_this_week == 0 and day_of_week == 5) \
+                or (self.days_off_this_week == 1 and day_of_week == 6):
+            allowed_shifts = allowed_shifts[allowed_shifts == self.off_shift]
+        return allowed_shifts
 
-        if self.last_shift == 1:
-            a = a[(a != 0)]
-        elif self.last_shift == 2:
-            a = a[(a == 2) | (a == 3)]
-
+    def weekend_per_week_constraints(self, a, day_of_week):
         if day_of_week == 5:
             if self.last_shift in (1, 2):
                 a = a[a != self.off_shift]
@@ -127,10 +138,16 @@ class PartialRoster(object):
             else:
                 a = a[a != self.off_shift]
                 self.is_work_weekend = True
-
         return a
 
-    def only_two_shift_types_per_week(self, a):
+    def last_shift_constraints(self, a):
+        if self.last_shift == 1:
+            a = a[(a != 0)]
+        elif self.last_shift == 2:
+            a = a[(a == 2) | (a == 3)]
+        return a
+
+    def only_two_shift_types_per_week_constraints(self, a):
         D, A, N = self.shifts_this_week
         if (D + A + N) == 2:
             if not D:

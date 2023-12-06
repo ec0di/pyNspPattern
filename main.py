@@ -19,16 +19,13 @@ base_demand = np.array([[3, 4, 3, 4, 3, 2, 2],
 demand = get_demand(base_demand, n_weeks)
 
 # read in solution
-nurse_df_base = pd.read_excel(base_path + 'data/wishes_ag.xlsx', sheet_name="personindstillinger")
+nurse_df_base = pd.read_excel(base_path + 'data/NurseData.xlsx', sheet_name="personindstillinger")
 nurse_df = nurse_df_base.groupby(['nurseHours', 'nurseLevel']).agg(nurseCount=('Person', 'count')).reset_index().rename_axis('nurseType').reset_index()
 
 
 # first find out all possible combinations from 4 week days
 # then find all combinations of 3 weekend days
 
-
-#nurse_df = nurse_df_base.groupby(['nurseLevel, 'nurseHours'])['Person'].count().reset_index().rename(
-#    columns={'Person': 'count'})
 # artificial
 #nurse_df.loc[:, 'nurse_count'] = [5, 5, 5, 5, 5, 5]
 
@@ -38,7 +35,8 @@ hard_shifts_fair_plans_factor = 0.5
 weekend_shifts_fair_plan_factor = 0.5
 
 cost_parameters, feasibility_parameters = calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand,
-                                                               hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor)
+                                                               hard_shifts_fair_plans_factor,
+                                                               weekend_shifts_fair_plan_factor)
 
 finished_rosters = []
 roster_df = pd.DataFrame()
