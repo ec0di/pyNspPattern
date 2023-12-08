@@ -2,6 +2,6 @@ pandas
 numpy
 ortools
 openpyxl
-pyarrow
+pyarrow==11.0.0
 fastparquet
 contexttimer
