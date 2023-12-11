@@ -1,14 +1,14 @@
 import numpy as np
 import pandas as pd
 
-from master_problem import master_problem
-from helpers import get_demand, calculate_parameters, read_rosters_from_parquet
+from master_problem import master_problem_instance
+from helpers import get_demand, calculate_parameters, calculate_binary_plans
 from roster_factory import calculate_roster_df
 from partial_roster import PartialRoster
 
 
 read_solution = True
-n_weeks = 2  # works for 1 week with nurse_type from bla
+n_weeks = 1  # works for 1 week with nurse_type from bla
 
 n_work_shifts = 3
 n_days = n_weeks * 7
@@ -35,10 +35,9 @@ cost_parameters, feasibility_parameters = calculate_parameters(n_weeks, n_work_s
                                                                weekend_shifts_fair_plan_factor)
 
 if read_solution:
-    roster_df, binary_plans = read_rosters_from_parquet(parquet_filename, n_days, n_work_shifts)
-
+    roster_df = pd.read_parquet(parquet_filename)
 else:
-    roster_df, binary_plans = calculate_roster_df(nurse_df, n_days, n_work_shifts, cost_parameters, feasibility_parameters)
+    roster_df = calculate_roster_df(nurse_df, n_days, n_work_shifts, cost_parameters, feasibility_parameters)
 
     # write out solution
     roster_df.columns = [str(colname) for colname in roster_df.columns]  # write df to parquet
@@ -54,18 +53,35 @@ else:
 #nurse_df = pd.DataFrame({'nurseHours': [37], 'nurseLevel': [3], 'nurseCount': [12], 'nurseType': [4]})  # works!
 #solver, nurse_c, demand_c, z, status = model_master(n_days, n_work_shifts, nurse_df, roster_df, binary_plans, demand, t_max_sec=10, solver_id='GLOP')
 
-#top_n_pct = 50
-#roster_df_ = roster_df.sort_values('totalCost').iloc[0:round(roster_df.shape[0]/100*top_n_pct)]
+n_largest_for_each_nurse = 3
+roster_largest_cost_df = roster_df.merge(roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
+                                         .nlargest(n_largest_for_each_nurse).reset_index().drop(columns=['totalCost']),
+                                         how='inner', on=['nurseType', 'rosterIndex'])
+largest_cost_array = np.tile(np.concatenate([1 * np.ones((1, n_days)),
+                                             2 * np.ones((1, n_days)),
+                                             3 * np.ones((1, n_days))]),
+                             (nurse_df.nurseType.nunique(), 1))
+roster_largest_cost_df.loc[:, [str(x) for x in range(n_days)]] = largest_cost_array
+roster_largest_cost_df.loc[:, 'rosterIndex'] = np.arange(roster_df.shape[0], roster_df.shape[0] + roster_largest_cost_df.shape[0])
+roster_largest_cost_df.loc[:, 'totalCost'] = 99999
 
-#n_smallest = 600
-#roster_df_ = roster_df.merge(roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost'].nsmallest(n_smallest).reset_index().drop(columns=['totalCost']),
-#                             how='inner', on=['nurseType', 'rosterIndex'])
+n_smallest_for_each_nurse = 5
+roster_smallest_cost_df = roster_df.merge(roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
+                                          .nsmallest(n_smallest_for_each_nurse).reset_index().drop(columns=['totalCost']),
+                                          how='inner', on=['nurseType', 'rosterIndex'])
+roster_indices = dict()
+for nurse_type in nurse_df.nurseType():
+    small_cost_set = set(roster_smallest_cost_df[roster_smallest_cost_df.nurseType == nurse_type].rosterIndex)
+    large_cost_set = set(roster_largest_cost_df[roster_largest_cost_df.nurseType == nurse_type].rosterIndex)
+    roster_indices[nurse_type] = small_cost_set.union(large_cost_set)
 
-# todo, make initial solution simple
+# update roster_df with large cost rosters
+roster_df = pd.concat([roster_df, roster_largest_cost_df])
+binary_plans = calculate_binary_plans(n_days, n_work_shifts, roster_df)
 
-solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem(n_days, n_work_shifts, nurse_df, roster_df,
-                                                                           binary_plans, demand,
-                                                                           t_max_sec=300, solver_id='GLOP')  # CBC, GLOP
+solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices,
+                                                                                    binary_plans, demand,
+                                                                                    t_max_sec=300, solver_id='GLOP')  # CBC, GLOP
 # sub problem iterations where we find and add rosters
 
 obj_int = solver.Objective().Value()

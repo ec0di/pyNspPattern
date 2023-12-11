@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from functools import wraps
 from time import time
+from contexttimer import timer
 
 OFF_SHIFT = 3
 
@@ -173,14 +174,15 @@ def calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand, hard_shi
 
 
 def read_rosters_from_parquet(parquet_filename, n_days, n_work_shifts):
-    start_time = time()
-    roster_df = pd.read_parquet(parquet_filename)
-    second_time = time()
-    print(f'Read parquet file in {round(second_time - start_time, 1)} s')
+    binary_plans = calculate_binary_plans(n_days, n_work_shifts, roster_df)
+    return roster_df, binary_plans
+
+
+@timer()
+def calculate_binary_plans(n_days, n_work_shifts, roster_df):
     binary_plans = {}
     for plan in roster_df.loc[:, [str(x) for x in np.arange(n_days)] + ['rosterIndex']].itertuples(index=False):
         binary_plans[plan.rosterIndex] = list_to_binary_array(plan[:-1], n_days, n_work_shifts)
-    print(f'Created binary plans in {round(time() - second_time, 1)} s')
-    return roster_df, binary_plans
+    return binary_plans
 
 

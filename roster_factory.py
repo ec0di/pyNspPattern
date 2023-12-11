@@ -9,8 +9,6 @@ from partial_roster import PartialRoster
 
 def calculate_roster_df(nurse_df, n_days, n_work_shifts, cost_parameters, feasibility_parameters):
     roster_df = pd.DataFrame()
-    count = 0
-    binary_plans = {}
     for nurse_type, nurse_hours in nurse_df[['nurseType', 'nurseHours']].itertuples(index=False):
         base_roster = PartialRoster(n_days=n_days,
                                     nurse_type=nurse_type,
@@ -37,13 +35,11 @@ def calculate_roster_df(nurse_df, n_days, n_work_shifts, cost_parameters, feasib
                 if new_roster.is_finished():
                     if new_roster.work_shifts_total >= n_shifts_for_nurse_type - 1:
                         individual_cost, fair_cost = new_roster.calculate_cost()
-                        binary_plans[count] = list_to_binary_array(new_roster.plan, n_days, n_work_shifts)
                         total_individual_cost, total_fair_cost = sum(individual_cost.values()), sum(fair_cost.values())
                         finished_rosters_data.append(
                             new_roster.plan + list(individual_cost.values()) + list(fair_cost.values())
                             + [total_individual_cost, total_fair_cost, total_individual_cost + total_fair_cost,
                                new_roster.nurse_type, new_roster.nurse_hours])
-                        count += 1
                 else:
                     rosters.append(new_roster)
 
@@ -62,4 +58,4 @@ def calculate_roster_df(nurse_df, n_days, n_work_shifts, cost_parameters, feasib
     roster_df = roster_df.reset_index()
     print(roster_df.shape)
 
-    return roster_df, binary_plans
+    return roster_df
