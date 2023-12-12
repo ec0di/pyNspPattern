@@ -50,6 +50,7 @@ else:
 n_largest_for_each_nurse = 3  # necessary with 3 to get full 0s, 1s, and 2s plans
 n_smallest_for_each_nurse = 5 ** n_weeks
 
+
 if use_initial_solution:
     roster_indices, binary_plans, roster_costs = roster_factory.initial_solution_for_cg(n_largest_for_each_nurse,
                                                                                         n_smallest_for_each_nurse)
