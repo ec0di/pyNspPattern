@@ -23,10 +23,13 @@ class RosterFactory:
         self.binary_plans = dict()
         self.roster_costs = dict()
 
+        # used primarily to create roster matching
+        self.rosters = list()
+
     def calculate_roster_df(self):
         roster_df = pd.DataFrame()
         for nurse_type, nurse_hours in self.nurse_df[['nurseType', 'nurseHours']].itertuples(index=False):
-            base_roster = PartialRoster(n_days=n_days,
+            base_roster = PartialRoster(n_days=self.n_days,
                                         nurse_type=nurse_type,
                                         nurse_hours=nurse_hours,
                                         n_work_shifts=self.n_work_shifts,
@@ -60,10 +63,10 @@ class RosterFactory:
                         rosters.append(new_roster)
 
             roster_df_ = pd.DataFrame(finished_rosters_data)
-            roster_df_.columns = np.arange(n_days).tolist() + list(individual_cost.keys()) + list(fair_cost.keys()) + \
+            roster_df_.columns = np.arange(self.n_days).tolist() + list(individual_cost.keys()) + list(fair_cost.keys()) + \
                                  ['totalIndividualCost', 'totalFairCost', 'totalCost', 'nurseType', 'nurseHours']
 
-            roster_df_ = roster_df_.assign(workShifts=lambda x: np.sum(x.loc[:, 0:n_days - 1] < 3, axis=1)) \
+            roster_df_ = roster_df_.assign(workShifts=lambda x: np.sum(x.loc[:, 0:self.n_days - 1] < 3, axis=1)) \
                 .assign(nurseHours=nurse_hours)
 
             roster_df_ = roster_df_[roster_df_.workShifts >= n_shifts_for_nurse_type - 1]
@@ -77,6 +80,14 @@ class RosterFactory:
 
         self.roster_df = roster_df
         return self.roster_df
+
+    def create_roster_matching(self):
+        pass
+        # last_shift_constraints: concerns last_shift of 1st roster and first_shift of 2nd roster
+        # worked_too_much_per_period_constraints: can be calculated easily with work_shifts_total for both rosters
+        # worked_too_many_day_consecutive_constraints: most time consuming constraint to check. Have to go 5 days into second roster to check that this holds. Use work_days_consecutive from 1st roster
+
+        # dump to pickle
 
     def read_roster_df_from_parquet(self, parquet_filename):
         self.roster_df = pd.read_parquet(parquet_filename)

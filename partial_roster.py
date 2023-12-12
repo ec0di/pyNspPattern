@@ -30,17 +30,13 @@ class PartialRoster(object):
         self.weekend_shift_total = 0
         self.off_shifts_consecutive = 0
 
-        # cost counters
+        # individual roster cost
         self.n_consecutive_shifts = 0
         self.n_missing_two_days_off_after_night_shifts = 0
         self.n_more_than_two_concecutive_night_shifts = 0
         self.n_single_night_shifts = 0
         self.n_more_than_four_consecutive_work_shifts = 0
-        #
-        self.cost = 0
-        self.fair_cost = 0
-        self.dual_cost = 0
-        # fair cost
+        # fair distribution of hard shifts cost
         self.afternoon_shifts_fair_cost = 0
         self.night_shifts_fair_cost = 0
         self.night_and_afternoon_shifts_fair_cost = 0
@@ -100,21 +96,27 @@ class PartialRoster(object):
         if self.day == 0:  # base case, we have no constraints yet
             return allowed_shifts
 
-        allowed_shifts = self.worked_too_much_constraints(allowed_shifts)
+        allowed_shifts = self.worked_too_much_per_period_constraints(allowed_shifts)
+
+        allowed_shifts = self.worked_too_many_day_consecutive_constraints(allowed_shifts)
+
+        allowed_shifts = self.last_shift_constraints(allowed_shifts)
 
         allowed_shifts = self.worked_too_much_per_week_constraints(allowed_shifts, day_of_week)
 
         allowed_shifts = self.only_two_shift_types_per_week_constraints(allowed_shifts)
 
-        allowed_shifts = self.last_shift_constraints(allowed_shifts)
-
         allowed_shifts = self.weekend_per_week_constraints(allowed_shifts, day_of_week)
 
         return allowed_shifts
 
-    def worked_too_much_constraints(self, allowed_shifts):
-        if self.work_shifts_total > self.feasibility_parameters.avg_shifts_per_period[self.nurse_type] + 1 \
-                or self.work_days_consecutive == 5:
+    def worked_too_much_per_period_constraints(self, allowed_shifts):
+        if self.work_shifts_total > self.feasibility_parameters.avg_shifts_per_period[self.nurse_type] + 1:
+            allowed_shifts = allowed_shifts[allowed_shifts == self.off_shift]
+        return allowed_shifts
+
+    def worked_too_many_day_consecutive_constraints(self, allowed_shifts):
+        if self.work_days_consecutive == 5:
             allowed_shifts = allowed_shifts[allowed_shifts == self.off_shift]
         return allowed_shifts
 

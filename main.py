@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pickle
 
 from master_problem import master_problem_instance
 from helpers import get_demand, calculate_parameters
