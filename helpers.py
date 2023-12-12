@@ -1,8 +1,6 @@
 import numpy as np
-import pandas as pd
 from functools import wraps
 from time import time
-from contexttimer import timer
 
 OFF_SHIFT = 3
 
@@ -28,14 +26,6 @@ def timing(f):
           (f.__name__, args, kw, te-ts))
         return result
     return wrap
-
-
-def list_to_binary_array(plan, n_days, n_work_shifts):
-    x = np.zeros((n_days, n_work_shifts))
-    for j, e in enumerate(plan):
-        if e != OFF_SHIFT:
-            x[j, e] = 1
-    return x
 
 
 def is_weekend(j, k):
@@ -173,16 +163,9 @@ def calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand, hard_shi
     return cost_parameters, feasibility_parameters
 
 
-def read_rosters_from_parquet(parquet_filename, n_days, n_work_shifts):
-    binary_plans = calculate_binary_plans(n_days, n_work_shifts, roster_df)
-    return roster_df, binary_plans
-
-
-@timer()
-def calculate_binary_plans(n_days, n_work_shifts, roster_df):
-    binary_plans = {}
-    for plan in roster_df.loc[:, [str(x) for x in np.arange(n_days)] + ['rosterIndex']].itertuples(index=False):
-        binary_plans[plan.rosterIndex] = list_to_binary_array(plan[:-1], n_days, n_work_shifts)
-    return binary_plans
-
-
+def list_to_binary_array(plan, n_days, n_work_shifts):
+    x = np.zeros((n_days, n_work_shifts))
+    for j, e in enumerate(plan):
+        if e != OFF_SHIFT:
+            x[j, e] = 1
+    return x

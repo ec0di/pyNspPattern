@@ -4,7 +4,7 @@ from contexttimer import timer
 
 
 def master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices, roster_costs, binary_plans, demand,
-                            t_max_sec, solver_id='GLOP'):  # GLOP is LÅ, CBC is MIP
+                            t_max_sec, solver_id='GLOP'):  # GLOP is LP, CBC is MIP
     solver = pywraplp.Solver.CreateSolver(solver_id=solver_id)
 
     start_time = time.time()
@@ -33,7 +33,10 @@ def master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices, ros
 
     print(f'Time to solve: {round(time.time() - setup_time, 2)} s')
 
-    print(f"Solution with Object {round(solver.Objective().Value(), 1)}")
+    if solver_id == 'CBC':
+        print(f"Integer Solution with Object {round(solver.Objective().Value(), 1)}")
+    elif solver_id == 'GLOP':
+        print(f"LP Solution with Object {round(solver.Objective().Value(), 1)}")
 
     return solver, nurse_c, demand_c, demand_advanced_nurse_level_c, z, status
 
