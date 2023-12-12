@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from helpers import list_to_binary_array
+from main import n_days
 from partial_roster import PartialRoster
 
 
@@ -54,8 +55,36 @@ def calculate_roster_df(nurse_df, n_days, n_work_shifts, cost_parameters, feasib
         print(roster_df_.shape[0])
         roster_df = pd.concat([roster_df, roster_df_])
 
+    roster_df = roster_df.sort_values(['nurseType', 'totalCost'])
     roster_df['rosterIndex'] = np.arange(roster_df.shape[0])
     roster_df = roster_df.reset_index()
     print(roster_df.shape)
 
     return roster_df
+
+
+def initial_solution_for_cg(nurse_df, roster_df, n_largest_for_each_nurse, n_smallest_for_each_nurse):
+    """This initial solution contains expensive 0s ,1s and 2s plans for all nurse types along with a set of the
+    cheapest plans for all nurse types"""
+    roster_largest_cost_df = roster_df.merge(roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
+                                             .nlargest(n_largest_for_each_nurse).reset_index().drop(
+        columns=['totalCost']),
+                                             how='inner', on=['nurseType', 'rosterIndex'])
+    largest_cost_array = np.tile(np.concatenate([0 * np.ones((1, n_days)),
+                                                 1 * np.ones((1, n_days)),
+                                                 2 * np.ones((1, n_days))]),
+                                 (nurse_df.nurseType.nunique(), 1)).astype(int)
+    roster_largest_cost_df.loc[:, [str(x) for x in range(n_days)]] = largest_cost_array
+    roster_largest_cost_df.loc[:, 'rosterIndex'] = np.arange(roster_df.shape[0],
+                                                             roster_df.shape[0] + roster_largest_cost_df.shape[0])
+    roster_largest_cost_df.loc[:, 'totalCost'] = 9999
+    roster_smallest_cost_df = roster_df.merge(roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
+                                              .nsmallest(n_smallest_for_each_nurse).reset_index().drop(
+        columns=['totalCost']),
+                                              how='inner', on=['nurseType', 'rosterIndex'])
+    roster_indices = dict()
+    for nurse_type in nurse_df.nurseType:
+        small_cost_set = set(roster_smallest_cost_df[roster_smallest_cost_df.nurseType == nurse_type].rosterIndex)
+        large_cost_set = set(roster_largest_cost_df[roster_largest_cost_df.nurseType == nurse_type].rosterIndex)
+        roster_indices[nurse_type] = small_cost_set.union(large_cost_set)
+    return roster_indices

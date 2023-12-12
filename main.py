@@ -1,14 +1,16 @@
 import numpy as np
 import pandas as pd
+import random
 
 from master_problem import master_problem_instance
 from helpers import get_demand, calculate_parameters, calculate_binary_plans
-from roster_factory import calculate_roster_df
+from roster_factory import calculate_roster_df, initial_solution_for_cg
 from partial_roster import PartialRoster
 
 
-read_solution = True
 n_weeks = 1  # works for 1 week with nurse_type from bla
+read_roster_df = True
+use_initial_solution = True
 
 n_work_shifts = 3
 n_days = n_weeks * 7
@@ -34,7 +36,7 @@ cost_parameters, feasibility_parameters = calculate_parameters(n_weeks, n_work_s
                                                                hard_shifts_fair_plans_factor,
                                                                weekend_shifts_fair_plan_factor)
 
-if read_solution:
+if read_roster_df:
     roster_df = pd.read_parquet(parquet_filename)
 else:
     roster_df = calculate_roster_df(nurse_df, n_days, n_work_shifts, cost_parameters, feasibility_parameters)
@@ -43,64 +45,100 @@ else:
     roster_df.columns = [str(colname) for colname in roster_df.columns]  # write df to parquet
     roster_df.to_parquet(parquet_filename, index=False)
 
-# run optimization problem
-#roster_df = pd.read_csv(csv_filename)
 
+n_largest_for_each_nurse = 3  # necessary with 3 to get full 0s, 1s, and 2s plans
+n_smallest_for_each_nurse = 5 ** n_weeks
 
-#nurse_df = nurse_df_base.groupby(['nurseHours', 'nurseLevel']).agg(nurseCount=('Person', 'count')).reset_index()
-
-#nurse_df = pd.DataFrame({'nurseHours': [37, 37], 'nurseLevel': [1, 3], 'nurseCount': [6, 12], 'nurseType': [4, 5]})  # works!
-#nurse_df = pd.DataFrame({'nurseHours': [37], 'nurseLevel': [3], 'nurseCount': [12], 'nurseType': [4]})  # works!
-#solver, nurse_c, demand_c, z, status = model_master(n_days, n_work_shifts, nurse_df, roster_df, binary_plans, demand, t_max_sec=10, solver_id='GLOP')
-
-n_largest_for_each_nurse = 3
-roster_largest_cost_df = roster_df.merge(roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
-                                         .nlargest(n_largest_for_each_nurse).reset_index().drop(columns=['totalCost']),
-                                         how='inner', on=['nurseType', 'rosterIndex'])
-largest_cost_array = np.tile(np.concatenate([1 * np.ones((1, n_days)),
-                                             2 * np.ones((1, n_days)),
-                                             3 * np.ones((1, n_days))]),
-                             (nurse_df.nurseType.nunique(), 1))
-roster_largest_cost_df.loc[:, [str(x) for x in range(n_days)]] = largest_cost_array
-roster_largest_cost_df.loc[:, 'rosterIndex'] = np.arange(roster_df.shape[0], roster_df.shape[0] + roster_largest_cost_df.shape[0])
-roster_largest_cost_df.loc[:, 'totalCost'] = 99999
-
-n_smallest_for_each_nurse = 5
-roster_smallest_cost_df = roster_df.merge(roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
-                                          .nsmallest(n_smallest_for_each_nurse).reset_index().drop(columns=['totalCost']),
-                                          how='inner', on=['nurseType', 'rosterIndex'])
-roster_indices = dict()
-for nurse_type in nurse_df.nurseType():
-    small_cost_set = set(roster_smallest_cost_df[roster_smallest_cost_df.nurseType == nurse_type].rosterIndex)
-    large_cost_set = set(roster_largest_cost_df[roster_largest_cost_df.nurseType == nurse_type].rosterIndex)
-    roster_indices[nurse_type] = small_cost_set.union(large_cost_set)
+if use_initial_solution:
+    roster_indices = initial_solution_for_cg(nurse_df, roster_df, n_largest_for_each_nurse, n_smallest_for_each_nurse)
+else:  # full set of rosters solution
+    roster_indices = dict()
+    for nurse_type in nurse_df.nurseType:
+        roster_indices[nurse_type] = set(roster_df[roster_df.nurseType == nurse_type].rosterIndex)
 
 # update roster_df with large cost rosters
-roster_df = pd.concat([roster_df, roster_largest_cost_df])
-binary_plans = calculate_binary_plans(n_days, n_work_shifts, roster_df)
+roster_df_with_initial_solution = pd.concat([roster_df, roster_largest_cost_df])  # put into class
+binary_plans = calculate_binary_plans(n_days, n_work_shifts, roster_df_with_initial_solution)
+roster_costs = roster_df_with_initial_solution.set_index('rosterIndex')['totalCost'].to_dict()
 
-solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices,
-                                                                                    binary_plans, demand,
-                                                                                    t_max_sec=300, solver_id='GLOP')  # CBC, GLOP
+# create map of day, work_shifts to rosters
+for day in range(n_days):
+    work_shift_dict = {f'day{day}_shift0': lambda x: x[f'{day}'] == 0,
+                       f'day{day}_shift1': lambda x: x[f'{day}'] == 1,
+                       f'day{day}_shift2': lambda x: x[f'{day}'] == 2}
+    roster_df = roster_df.assign(**work_shift_dict)
+
+# todo, update day_shift_to_roster_index
+#day_shift_to_roster_index = dict()
+#for day in range(n_days):
+#    for shift in range(n_work_shifts):
+#        roster_df_ = roster_df[~roster_df.rosterIndex.isin(set.union(*list(roster_indices.values())))]
+#        day_shift_to_roster_index[(day, shift)] = roster_df_[roster_df_[f'day{day}_shift{shift}']].rosterIndex.values
+
+object_value = 99999
+max_iter = 10
+iter = 0
+n_rosters_per_nurse_per_iteration = 5 ** n_weeks
+
+while iter <= max_iter and object_value >= 20 * n_weeks:
+    solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_instance(n_days=n_days, n_work_shifts=n_work_shifts,
+                                                                                        nurse_df=nurse_df, roster_indices=roster_indices,
+                                                                                        roster_costs=roster_costs, binary_plans=binary_plans,
+                                                                                        demand=demand,
+                                                                                        t_max_sec=300, solver_id='GLOP')
+
+    np.array([const.dual_value() for const in nurse_c.values()])
+    np.array([const.dual_value() for const in demand_comp_level_c.values()]).reshape((n_days, n_work_shifts))
+    demand_duals = np.array([const.dual_value() for const in demand_c.values()]).reshape((n_days, n_work_shifts))
+    print(demand_duals)
+    id_max = tuple(np.unravel_index(demand_duals.argmax(), demand_duals.shape))
+    print(id_max)
+
+    new_roster_indices = []
+    roster_df_ = roster_df[~roster_df.rosterIndex.isin(set.union(*list(roster_indices.values())))]
+    for nurse_type in nurse_df.nurseType:
+        #lowest_cost_roster_index = np.arange(0, n_rosters_per_nurse_per_iteration)
+        df = roster_df_[roster_df_.nurseType==nurse_type]
+        df = df[df[f'day{id_max[0]}_shift{id_max[1]}']]
+        # random numbers
+        n_rosters_left = df.shape[0]
+        random_numbers = random.sample(range(0, n_rosters_left), min(n_rosters_left, n_rosters_per_nurse_per_iteration))
+
+        new_roster_indices = df.rosterIndex.values[random_numbers]
+        #new_roster_indices = day_shift_to_roster_index[id_max][lowest_cost_roster_index]
+        #np.delete(day_shift_to_roster_index[id_max], lowest_cost_roster_index)
+        roster_indices[nurse_type] = roster_indices[nurse_type].union(set(new_roster_indices))
+    print(len(set.union(*list(roster_indices.values()))), 'rosters in model')
+
+    object_value = solver.Objective().Value()
+    iter += 1
+    print('------------')
+    print(f'Iteration {iter}')
+    print('------------')
+
 # sub problem iterations where we find and add rosters
 
-obj_int = solver.Objective().Value()
-print(f"Integer Solution with Object {round(obj_int, 1)}")
+solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_instance(n_days=n_days, n_work_shifts=n_work_shifts,
+                                                                                    nurse_df=nurse_df, roster_indices=roster_indices,
+                                                                                    roster_costs=roster_costs, binary_plans=binary_plans,
+                                                                                    demand=demand,
+                                                                                    t_max_sec=300, solver_id='CBC')
 
 if status == 0:
     z_int = {key: value.solution_value() for key, value in z.items()}
 
-    r_indices_df = pd.DataFrame([key[0],key[1], value] for key, value in z_int.items() if value >= 1)
+    r_indices_df = pd.DataFrame([key[0], key[1], value] for key, value in z_int.items() if value >= 1)
     r_indices_df.columns = ['nurseType', 'rosterIndex', 'nRostersInSolution']
 
     # nice to remember: .loc[lambda x: x.nurseType == 2]
-    roster_solution_df = roster_df.merge(r_indices_df, how='inner', on=['rosterIndex', 'nurseType'])
+    roster_solution_df = roster_df_with_initial_solution.merge(r_indices_df, how='inner', on=['rosterIndex', 'nurseType'])
     print(roster_solution_df.loc[:, [str(x) for x in np.arange(n_days)]])
 
 
 # patch 2 rosters together
 cost_parameters, feasibility_parameters = calculate_parameters(2 * n_weeks, n_work_shifts, nurse_df, base_demand,
-                                                               hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor)
+                                                               hard_shifts_fair_plans_factor,
+                                                               weekend_shifts_fair_plan_factor)
 
 base_roster = PartialRoster(n_days=2 * n_days,
                             nurse_type=5,
@@ -110,7 +148,6 @@ base_roster = PartialRoster(n_days=2 * n_days,
                             feasibility_parameters=feasibility_parameters)
 
 if False:
-    import time
     start_time = time.time()
 
     finished_patched_rosters = []
