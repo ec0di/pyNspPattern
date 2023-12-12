@@ -46,7 +46,6 @@ else:
     roster_df.columns = [str(colname) for colname in roster_df.columns]  # write df to parquet
     roster_df.to_parquet(parquet_filename, index=False)
 
-
 n_largest_for_each_nurse = 3  # necessary with 3 to get full 0s, 1s, and 2s plans
 n_smallest_for_each_nurse = 5 ** n_weeks
 
