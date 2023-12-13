@@ -26,52 +26,58 @@ class RosterFactory:
         # used primarily to create roster matching
         self.rosters = list()
 
+    @timer()
     def calculate_roster_df(self):
-        roster_df = pd.DataFrame()
-        for nurse_type, nurse_hours in self.nurse_df[['nurseType', 'nurseHours']].itertuples(index=False):
-            base_roster = PartialRoster(n_days=self.n_days,
-                                        nurse_type=nurse_type,
-                                        nurse_hours=nurse_hours,
-                                        n_work_shifts=self.n_work_shifts,
-                                        cost_parameters=self.cost_parameters,
-                                        feasibility_parameters=self.feasibility_parameters)
+        nurse_type_minimum_hours = self.nurse_df.sort_values('nurseHours').iloc[0].nurseType
+        nurse_type_maximum_hours = self.nurse_df.sort_values('nurseHours').iloc[-1].nurseType
+        n_shifts_for_nurse_type_with_minimum_hours = self.feasibility_parameters.avg_shifts_per_period[nurse_type_minimum_hours]
+        base_roster = PartialRoster(n_days=self.n_days,
+                                    nurse_type=nurse_type_maximum_hours,
+                                    n_work_shifts=self.n_work_shifts,
+                                    cost_parameters=self.cost_parameters,
+                                    feasibility_parameters=self.feasibility_parameters)
 
-            n_shifts_for_nurse_type = self.feasibility_parameters.avg_shifts_per_period[nurse_type]
+        rosters = []
+        finished_rosters_data = []
+        for shift in range(self.n_work_shifts + 1):
+            roster = copy.deepcopy(base_roster)
+            roster.increment(shift)
+            rosters.append(roster)
 
-            rosters = []
-            finished_rosters_data = []
-            for shift in range(self.n_work_shifts + 1):
-                roster = copy.deepcopy(base_roster)
-                roster.increment(shift)
-                rosters.append(roster)
+        while len(rosters) > 0:
+            roster = rosters.pop()
+            shifts = set(roster.feasible_shifts())
+            for shift in shifts:
+                new_roster = copy.deepcopy(roster)
+                new_roster.increment(shift)
 
-            while len(rosters) > 0:
-                roster = rosters.pop()
-                shifts = set(roster.feasible_shifts())
-                for shift in shifts:
-                    new_roster = copy.deepcopy(roster)
-                    new_roster.increment(shift)
-                    if new_roster.is_finished():
-                        if new_roster.work_shifts_total >= n_shifts_for_nurse_type - 1:
-                            individual_cost, fair_cost = new_roster.calculate_cost()
-                            total_individual_cost, total_fair_cost = sum(individual_cost.values()), sum(fair_cost.values())
-                            finished_rosters_data.append(
-                                new_roster.plan + list(individual_cost.values()) + list(fair_cost.values())
-                                + [total_individual_cost, total_fair_cost, total_individual_cost + total_fair_cost,
-                                   new_roster.nurse_type, new_roster.nurse_hours])
-                    else:
-                        rosters.append(new_roster)
+                off_shifts_needed_later = ((self.n_days - new_roster.day) // 7) * 2  # 2 off shifts per week
+                off_shifts_total = new_roster.day - new_roster.work_shifts_total + off_shifts_needed_later
+                minimum_allowed_off_shifts = self.n_days - (self.feasibility_parameters.avg_shifts_per_period[nurse_type_minimum_hours] + 1)
+                if off_shifts_total > minimum_allowed_off_shifts:
+                    continue
 
-            roster_df_ = pd.DataFrame(finished_rosters_data)
-            roster_df_.columns = np.arange(self.n_days).tolist() + list(individual_cost.keys()) + list(fair_cost.keys()) + \
-                                 ['totalIndividualCost', 'totalFairCost', 'totalCost', 'nurseType', 'nurseHours']
+                if new_roster.is_finished():
+                    if new_roster.work_shifts_total >= n_shifts_for_nurse_type_with_minimum_hours - 1:
+                        for nurse_type in self.nurse_df.nurseType:
+                            if new_roster.work_shifts_total >= self.feasibility_parameters.avg_shifts_per_period[nurse_type] - 1:
+                                new_roster_nurse_type = copy.deepcopy(new_roster)
+                                new_roster_nurse_type.nurse_type = nurse_type
 
-            roster_df_ = roster_df_.assign(workShifts=lambda x: np.sum(x.loc[:, 0:self.n_days - 1] < 3, axis=1)) \
-                .assign(nurseHours=nurse_hours)
+                                individual_cost, fair_cost = new_roster_nurse_type.calculate_cost()
+                                total_individual_cost, total_fair_cost = sum(individual_cost.values()), sum(fair_cost.values())
+                                finished_rosters_data.append(
+                                    new_roster_nurse_type.plan + list(individual_cost.values()) + list(fair_cost.values())
+                                    + [total_individual_cost, total_fair_cost, total_individual_cost + total_fair_cost,
+                                       new_roster_nurse_type.nurse_type])
+                else:
+                    rosters.append(new_roster)
 
-            roster_df_ = roster_df_[roster_df_.workShifts >= n_shifts_for_nurse_type - 1]
-            print(roster_df_.shape[0])
-            roster_df = pd.concat([roster_df, roster_df_])
+        roster_df = pd.DataFrame(finished_rosters_data)
+        roster_df.columns = np.arange(self.n_days).tolist() + list(individual_cost.keys()) + list(fair_cost.keys()) + \
+                             ['totalIndividualCost', 'totalFairCost', 'totalCost', 'nurseType']
+
+        roster_df = roster_df.assign(workShifts=lambda x: np.sum(x.loc[:, 0:self.n_days - 1] < 3, axis=1))
 
         roster_df = roster_df.sort_values(['nurseType', 'totalCost'])
         roster_df['rosterIndex'] = np.arange(roster_df.shape[0])
@@ -105,13 +111,13 @@ class RosterFactory:
                                                      2 * np.ones((1, self.n_days))]),
                                      (self.nurse_df.nurseType.nunique(), 1)).astype(int)
         roster_largest_cost_df.loc[:, [str(x) for x in range(self.n_days)]] = largest_cost_array
-        roster_largest_cost_df.loc[:, 'rosterIndex'] = np.arange(self.roster_df.shape[0],
-                                                                 self.roster_df.shape[0] + roster_largest_cost_df.shape[0])
-        roster_largest_cost_df.loc[:, 'totalCost'] = 9999
-        roster_smallest_cost_df = self.roster_df.merge(self.roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
-                                                  .nsmallest(n_smallest_for_each_nurse).reset_index().drop(
-            columns=['totalCost']),
-                                                  how='inner', on=['nurseType', 'rosterIndex'])
+        roster_largest_cost_df['rosterIndex'] = np.arange(self.roster_df.shape[0],
+                                                          self.roster_df.shape[0] + roster_largest_cost_df.shape[0])
+        roster_largest_cost_df['totalCost'] = 9999
+        roster_smallest_cost_df = self.roster_df.merge(
+            self.roster_df.rename_axis('rosterIndex').groupby('nurseType')['totalCost']
+            .nsmallest(n_smallest_for_each_nurse).reset_index().drop(columns=['totalCost']),
+            how='inner', on=['nurseType', 'rosterIndex'])
         roster_indices = dict()
         for nurse_type in self.nurse_df.nurseType:
             small_cost_set = set(roster_smallest_cost_df[roster_smallest_cost_df.nurseType == nurse_type].rosterIndex)

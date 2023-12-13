@@ -1,17 +1,15 @@
 import numpy as np
 import copy
 
-from helpers import is_weekend, COSTS as cost_elements
+from helpers import is_weekend, COSTS as cost_elements, FeasibilityParameters, CostParameters, OFF_SHIFT
 
 
 class PartialRoster(object):
-    def __init__(self, n_days: int, nurse_type: int, nurse_hours: int, n_work_shifts: int,
-                 cost_parameters: object, feasibility_parameters: object):
+    def __init__(self, n_days: int, nurse_type: int, n_work_shifts: int,
+                 cost_parameters: CostParameters, feasibility_parameters: FeasibilityParameters):
         self.n_days = n_days
         self.nurse_type = nurse_type
-        self.nurse_hours = nurse_hours
         self.n_work_shifts = n_work_shifts
-        self.off_shift = n_work_shifts
         self.day = 0  # [0, ..., n_days-1]
         self.plan = []
         self.work_shifts_total = 0
@@ -44,7 +42,7 @@ class PartialRoster(object):
 
     def increment(self, shift_type: int):
         k = shift_type
-        if k != self.off_shift:
+        if k != OFF_SHIFT:
             self.off_shifts_consecutive = 0
             self.work_shifts_total += 1
             self.work_days_consecutive += 1
@@ -68,7 +66,7 @@ class PartialRoster(object):
             self.off_shifts_consecutive += 1
 
         # update cost counters
-        if self.last_shift == k and k != self.off_shift:
+        if self.last_shift == k and k != OFF_SHIFT:
             self.n_consecutive_shifts += 1
         if self.shift_before_last_shift == 2 and self.last_shift != 2 and not self.off_shifts_consecutive == 2:
             self.n_missing_two_days_off_after_night_shifts += 1
@@ -112,33 +110,33 @@ class PartialRoster(object):
 
     def worked_too_much_per_period_constraints(self, allowed_shifts):
         if self.work_shifts_total > self.feasibility_parameters.avg_shifts_per_period[self.nurse_type] + 1:
-            allowed_shifts = allowed_shifts[allowed_shifts == self.off_shift]
+            allowed_shifts = allowed_shifts[allowed_shifts == OFF_SHIFT]
         return allowed_shifts
 
     def worked_too_many_day_consecutive_constraints(self, allowed_shifts):
         if self.work_days_consecutive == 5:
-            allowed_shifts = allowed_shifts[allowed_shifts == self.off_shift]
+            allowed_shifts = allowed_shifts[allowed_shifts == OFF_SHIFT]
         return allowed_shifts
 
     def worked_too_much_per_week_constraints(self, allowed_shifts, day_of_week):
         if (self.days_off_this_week == 0 and day_of_week == 5) \
                 or (self.days_off_this_week == 1 and day_of_week == 6):
-            allowed_shifts = allowed_shifts[allowed_shifts == self.off_shift]
+            allowed_shifts = allowed_shifts[allowed_shifts == OFF_SHIFT]
         return allowed_shifts
 
     def weekend_per_week_constraints(self, a, day_of_week):
         if day_of_week == 5:
             if self.last_shift in (1, 2):
-                a = a[a != self.off_shift]
+                a = a[a != OFF_SHIFT]
             if self.last_shift == 0:
                 a = a[(a == 0) | (a == 3)]
             if self.last_shift == 3:
-                a = a[a == self.off_shift]
+                a = a[a == OFF_SHIFT]
         if day_of_week == 6:  # we can work and if we work, we must work all weekend
-            if self.last_shift == self.off_shift:
-                a = a[a == self.off_shift]
+            if self.last_shift == OFF_SHIFT:
+                a = a[a == OFF_SHIFT]
             else:
-                a = a[a != self.off_shift]
+                a = a[a != OFF_SHIFT]
                 self.is_work_weekend = True
         return a
 
@@ -194,10 +192,10 @@ class PartialRoster(object):
         costs = []
         for k in feasible_shifts:
             cost = {'fair_cost': 0, 'individual_cost': 0}
-            if self.last_shift == k and k != self.off_shift:
+            if self.last_shift == k and k != OFF_SHIFT:
                 cost['individual_cost'] += ce['consecutiveShifts']
                 cp.count_cost_cases['consecutiveShifts'] += 1
-            if self.shift_before_last_shift == 2 and self.last_shift != self.off_shift and k != self.off_shift:
+            if self.shift_before_last_shift == 2 and self.last_shift != OFF_SHIFT and k != OFF_SHIFT:
                 cost['individual_cost'] += ce['missingTwoDaysOffAfterNightShifts']
                 cp.count_cost_cases['missingTwoDaysOffAfterNightShifts'] += 1
             if k == 2 and self.night_shift_consecutive >= 2:
@@ -206,7 +204,7 @@ class PartialRoster(object):
             if self.night_shift_consecutive == 1 and k != 2:
                 cost['individual_cost'] += ce['singleNightShift']
                 cp.count_cost_cases['singleNightShift'] += 1
-            if self.work_days_consecutive >= 4 and k != self.off_shift:
+            if self.work_days_consecutive >= 4 and k != OFF_SHIFT:
                 cost['individual_cost'] += ce['moreThanFourConsecutiveWorkShifts']
                 cp.count_cost_cases['moreThanFourConsecutiveWorkShifts'] += 1
 

@@ -8,9 +8,12 @@ from roster_factory import RosterFactory
 from partial_roster import PartialRoster
 
 
-n_weeks = 2  # works for 1 week with nurse_type from bla
-read_roster_df = True
+n_weeks = 3  # works for 1 week with nurse_type from bla
+read_roster_df = False
+
 use_initial_solution = True
+max_iter = 1
+n_rosters_per_nurse_per_iteration = 5 ** n_weeks
 
 n_work_shifts = 3
 n_days = n_weeks * 7
@@ -59,9 +62,6 @@ else:  # full set of rosters solution
 # create map of day, work_shifts to rosters
 roster_factory.append_day_work_shift_flags()
 
-max_iter = 10
-n_rosters_per_nurse_per_iteration = 5 ** n_weeks
-
 roster_factory.run_column_generation(verbose=True,
                                      demand=demand,
                                      max_iter=max_iter,
@@ -98,7 +98,6 @@ cost_parameters, feasibility_parameters = calculate_parameters(2 * n_weeks, n_wo
 
 base_roster = PartialRoster(n_days=2 * n_days,
                             nurse_type=5,
-                            nurse_hours=37,
                             n_work_shifts=n_work_shifts,
                             cost_parameters=cost_parameters,
                             feasibility_parameters=feasibility_parameters)
