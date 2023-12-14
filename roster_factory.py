@@ -27,7 +27,7 @@ class RosterFactory:
         self.rosters = list()
 
     @timer()
-    def calculate_roster_df(self):
+    def calculate_roster_df(self, add_matching=False):
         nurse_type_minimum_hours = self.nurse_df.sort_values('nurseHours').iloc[0].nurseType
         nurse_type_maximum_hours = self.nurse_df.sort_values('nurseHours').iloc[-1].nurseType
         n_shifts_for_nurse_type_with_minimum_hours = self.feasibility_parameters.avg_shifts_per_period[nurse_type_minimum_hours]
@@ -69,13 +69,14 @@ class RosterFactory:
                                 finished_rosters_data.append(
                                     new_roster_nurse_type.plan + list(individual_cost.values()) + list(fair_cost.values())
                                     + [total_individual_cost, total_fair_cost, total_individual_cost + total_fair_cost,
-                                       new_roster_nurse_type.nurse_type])
+                                       new_roster_nurse_type.nurse_type,
+                                       new_roster_nurse_type.work_days_consecutive])
                 else:
                     rosters.append(new_roster)
 
         roster_df = pd.DataFrame(finished_rosters_data)
         roster_df.columns = np.arange(self.n_days).tolist() + list(individual_cost.keys()) + list(fair_cost.keys()) + \
-                             ['totalIndividualCost', 'totalFairCost', 'totalCost', 'nurseType']
+                             ['totalIndividualCost', 'totalFairCost', 'totalCost', 'nurseType', 'workDaysConsecutive']
 
         roster_df = roster_df.assign(workShifts=lambda x: np.sum(x.loc[:, 0:self.n_days - 1] < 3, axis=1))
 
@@ -85,12 +86,15 @@ class RosterFactory:
         print(roster_df.shape)
 
         self.roster_df = roster_df
+
         return self.roster_df
 
     def create_roster_matching(self):
         pass
+        # take all unique roster plans
+
         # last_shift_constraints: concerns last_shift of 1st roster and first_shift of 2nd roster
-        # worked_too_much_per_period_constraints: can be calculated easily with work_shifts_total for both rosters
+        # worked_too_much_per_period_constraints: can be calculated easily with work_shifts_total for both rosters (DO OUTSIDE OF LOOP with roster_df)
         # worked_too_many_day_consecutive_constraints: most time consuming constraint to check. Have to go 5 days into second roster to check that this holds. Use work_days_consecutive from 1st roster
 
         # dump to pickle
