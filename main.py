@@ -8,28 +8,37 @@ from roster_factory import RosterFactory
 from partial_roster import PartialRoster
 
 
-n_weeks = 3  # works for 1 week with nurse_type from bla
-read_roster_df = False
+n_weeks = 2  # works for 1 week with nurse_type from bla
+read_roster_df = True
 
 use_initial_solution = True
-max_iter = 1
+max_iter = 2
 n_rosters_per_nurse_per_iteration = 5 ** n_weeks
 
 n_work_shifts = 3
 n_days = n_weeks * 7
 base_path = ''
 parquet_filename = f'{base_path}data/{n_weeks}WeekRosters.parquet'
+nurse_df_multiplier = 1
 
 # demand per week
 base_demand = np.array([[3, 4, 3, 4, 3, 2, 2],
                         [2, 2, 2, 2, 2, 2, 2],
                         [2, 2, 2, 2, 2, 2, 2]])
+
+base_demand *= nurse_df_multiplier
+
 demand = get_demand(base_demand, n_weeks)
 
 # read in solution
 nurse_df_base = pd.read_excel(base_path + 'data/NurseData.xlsx', sheet_name="personindstillinger")
 nurse_df = nurse_df_base.groupby(['nurseHours', 'nurseLevel']).agg(nurseCount=('Person', 'count')).reset_index()\
     .rename_axis('nurseType').reset_index()
+nurse_df.nurseCount *= nurse_df_multiplier
+
+
+# quick check of demand vs supply
+print('demand vs supply: ', sum(sum(base_demand)), 'vs', sum(nurse_df.nurseHours / 8 * nurse_df.nurseCount))
 
 # factors
 hard_shifts_fair_plans_factor = 0.5
@@ -48,6 +57,8 @@ else:
     # write out solution
     roster_df.columns = [str(colname) for colname in roster_df.columns]  # write df to parquet
     roster_df.to_parquet(parquet_filename, index=False)
+
+roster_factory.create_roster_matching()
 
 n_largest_for_each_nurse = 3  # necessary with 3 to get full 0s, 1s, and 2s plans
 n_smallest_for_each_nurse = 5 ** n_weeks

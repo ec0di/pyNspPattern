@@ -41,14 +41,14 @@ def master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices, ros
     return solver, nurse_c, demand_c, demand_advanced_nurse_level_c, z, status
 
 
-@timer()
+#@timer()
 def create_objective(nurse_df, roster_indices, roster_costs, solver, z):
     obj = solver.Sum([z[nurse_type, roster_idx] * roster_costs[roster_idx] for nurse_type in nurse_df.nurseType.values
                       for roster_idx in roster_indices[nurse_type]])
     return obj
 
 
-@timer()
+#@timer()
 def advanced_nurses_demand_constraint(binary_plans, demand_advanced_nurse_level, n_days, n_work_shifts, nurse_df,
                                       roster_indices, solver, z):
     demand_advanced_nurse_level_c = {
@@ -60,7 +60,7 @@ def advanced_nurses_demand_constraint(binary_plans, demand_advanced_nurse_level,
     return demand_advanced_nurse_level_c
 
 
-@timer()
+#@timer()
 def all_nurses_demand_constraint(binary_plans, demand, n_days, n_work_shifts, nurse_df, roster_indices, solver, z):
     demand_c = {(j, k): solver.Add(solver.Sum([z[nurse_type, roster_idx] * binary_plans[roster_idx][j, k]
                                                for nurse_type in nurse_df.nurseType.values
@@ -70,7 +70,7 @@ def all_nurses_demand_constraint(binary_plans, demand, n_days, n_work_shifts, nu
     return demand_c
 
 
-@timer()
+#@timer()
 def n_rosters_must_match_nurse_count_constraint(nurse_df, roster_indices, solver, z):
     nurse_c = dict()
     for nurse_type, nurse_count in nurse_df[['nurseType', 'nurseCount']].itertuples(index=False):
@@ -80,7 +80,7 @@ def n_rosters_must_match_nurse_count_constraint(nurse_df, roster_indices, solver
     return nurse_c
 
 
-@timer()
+#@timer()
 def create_decision_variables(nurse_df, roster_indices, solver, solver_id):
     z = {}
     for nurse_type in nurse_df.nurseType.unique():

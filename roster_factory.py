@@ -91,6 +91,28 @@ class RosterFactory:
 
     def create_roster_matching(self):
         pass
+        nurse_type = 0
+        roster_df_ = self.roster_df[self.roster_df.nurseType == nurse_type]
+        roster_map = dict()
+        # initialize roster map with all rostersAllowedAfter and rostersAllowedBefore empty lists for all rosterIndex
+        for roster_1 in roster_df_.itertuples(index=False):
+            roster_map[roster_1.rosterIndex] = {'rostersAllowedAfter': []}
+            rosters_allowed_before = []
+            for roster_2 in roster_df_.itertuples(index=False):
+                # last_shift_constraints:
+                roster_1[1:3]
+                shift_1 = roster_1[str(self.n_days - 1)]
+                shift_2 = roster_1[str(0)]
+                if (shift_1 == 1 and shift_2 == 2) or (shift_1 == 2 and shift_2 in [0, 1]):
+                    continue
+                # worked_too_much_per_period_constraints:
+                if roster_1.workShifts + roster_2.workShifts > self.feasibility_parameters.avg_shifts_per_period[nurse_type] * 2:
+                    continue
+                # worked_too_many_day_consecutive_constraints:
+                work_days_consecutive_start_2 = np.where(roster_2[2:7])[0][0]
+                if roster_1.workDaysConsecutive + work_days_consecutive_start_2 > 5:
+                    continue
+                nroster_1
         # take all unique roster plans
 
         # last_shift_constraints: concerns last_shift of 1st roster and first_shift of 2nd roster
@@ -166,7 +188,7 @@ class RosterFactory:
         constraints."""
 
         object_value = 99999
-        iter = 0
+        iter = 1
         while iter <= max_iter and min_object_value * self.n_weeks <= object_value:
             solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_instance(n_days=self.n_days,
                                                                                                 n_work_shifts=self.n_work_shifts,
@@ -198,8 +220,6 @@ class RosterFactory:
                 self.roster_indices[nurse_type] = self.roster_indices[nurse_type].union(set(new_roster_indices))
 
             object_value = solver.Objective().Value()
-            iter += 1
-
             if verbose:
                 print(demand_duals)
                 print(id_max)
@@ -207,3 +227,5 @@ class RosterFactory:
                 print('------------')
                 print(f'Iteration {iter}')
                 print('------------')
+            iter += 1
+
