@@ -28,7 +28,7 @@ class RosterFactory:
 
     @timer()
     def calculate_roster_df(self):
-        DELTA_NURSE_HOURS = 4
+        DELTA_NURSE_SHIFTS = 4 if self.n_weeks == 1 else 1  # for 1-week rosters it is okay to create lots of rosters
 
         nurse_hours_list = self.nurse_df.nurseHours.unique()
         min_nurse_hours = nurse_hours_list.min()
@@ -56,14 +56,14 @@ class RosterFactory:
 
                 off_shifts_needed_later = ((self.n_days - new_roster.day) // 7) * 2  # 2 off shifts per week
                 off_shifts_total = new_roster.day - new_roster.work_shifts_total + off_shifts_needed_later
-                minimum_allowed_off_shifts = self.n_days - (self.feasibility_parameters.avg_shifts_per_period[min_nurse_hours] - DELTA_NURSE_HOURS)
+                minimum_allowed_off_shifts = self.n_days - (self.feasibility_parameters.avg_shifts_per_period[min_nurse_hours] - DELTA_NURSE_SHIFTS)
                 if off_shifts_total > minimum_allowed_off_shifts:
                     continue
 
                 if new_roster.is_finished():
-                    if new_roster.work_shifts_total >= n_shifts_for_min_nurse_hours - DELTA_NURSE_HOURS:
+                    if new_roster.work_shifts_total >= n_shifts_for_min_nurse_hours - DELTA_NURSE_SHIFTS:
                         for nurse_hours in nurse_hours_list:
-                            if new_roster.work_shifts_total >= self.feasibility_parameters.avg_shifts_per_period[nurse_hours] - DELTA_NURSE_HOURS:
+                            if new_roster.work_shifts_total >= self.feasibility_parameters.avg_shifts_per_period[nurse_hours] - DELTA_NURSE_SHIFTS:
                                 new_roster_nurse_hours = copy.deepcopy(new_roster)
                                 new_roster_nurse_hours.nurse_hours = nurse_hours
 
@@ -92,7 +92,7 @@ class RosterFactory:
         return self.roster_df
 
     @timer()
-    def create_roster_matching(self):
+    def calculate_roster_matching(self):
         roster_matching = {rosterIndex: {'rostersAllowedAfter': [], 'rostersAllowedBefore': []}
                            for rosterIndex in self.roster_df.rosterIndex}
         for nurse_hours in self.nurse_df.nurseHours.unique():
@@ -150,10 +150,10 @@ class RosterFactory:
             .nsmallest(n_smallest_for_each_nurse).reset_index().drop(columns=['totalCost']),
             how='inner', on=['nurseHours', 'rosterIndex'])
         roster_indices = dict()
-        for nurse_hours in self.nurse_df.nurseHours.unique():
+        for nurse_hours, last_roster_index in self.nurse_df.groupby(['nurseHours', 'lastRosterIndex']).groups.keys():
             small_cost_set = set(roster_smallest_cost_df[roster_smallest_cost_df.nurseHours == nurse_hours].rosterIndex)
             large_cost_set = set(roster_largest_cost_df[roster_largest_cost_df.nurseHours == nurse_hours].rosterIndex)
-            roster_indices[nurse_hours] = small_cost_set.union(large_cost_set)
+            roster_indices[nurse_hours, last_roster_index] = small_cost_set.union(large_cost_set)
 
         print('initial expensive solution is added to roster_df (0s, 1s, 2s)')
         self.roster_df = pd.concat([self.roster_df, roster_largest_cost_df])  # put into class
@@ -185,6 +185,19 @@ class RosterFactory:
             self.roster_df = self.roster_df.assign(**work_shift_dict)
         return self.roster_df
 
+    def append_one_week_roster_index_to_two_week_roster_df(self, roster1_df):
+        roster2_df = self.roster_df
+        first_week_cols = [str(x) for x in np.arange(7)]
+        second_week_cols = [str(x) for x in np.arange(7, 14)]
+        roster2_with_roster1_index_df = roster2_df.merge(roster1_df.rename(columns={'rosterIndex': 'rosterIndexWeek1'})[first_week_cols+['nurseHours', 'rosterIndexWeek1']],
+                         how='inner', on=['nurseHours']+first_week_cols)\
+                  .merge(roster1_df.rename(columns={'rosterIndex': 'rosterIndexWeek2', **{col: str(int(col)+7) for col in first_week_cols}})
+                              [second_week_cols+['nurseHours', 'rosterIndexWeek2']],
+                         how='inner', on=['nurseHours']+second_week_cols)
+        print('roster 2 week shape before and after: ', roster2_df.shape, roster2_with_roster1_index_df.shape)
+        self.roster_df = roster2_with_roster1_index_df
+        return roster2_with_roster1_index_df
+
     @timer()
     def run_column_generation(self, demand, solver_id='GLOP', max_iter=10, min_object_value=20,
                               max_time_per_iteration_s=10, n_rosters_per_nurse_per_iteration=10, verbose=False):
@@ -212,7 +225,7 @@ class RosterFactory:
             id_max = tuple(np.unravel_index(demand_duals.argmax(), demand_duals.shape))
 
             roster_df_ = self.roster_df[~self.roster_df.rosterIndex.isin(set.union(*list(self.roster_indices.values())))]
-            for nurse_hours in self.nurse_df.nurseHours.unique():
+            for nurse_hours, last_roster_index in self.nurse_df.groupby(['nurseHours', 'lastRosterIndex']).groups.keys():
                 # lowest_cost_roster_index = np.arange(0, n_rosters_per_nurse_per_iteration)
                 df = roster_df_[roster_df_.nurseHours == nurse_hours]
                 df = df[df[f'day{id_max[0]}_shift{id_max[1]}']]
@@ -222,7 +235,7 @@ class RosterFactory:
                                                min(n_rosters_left, n_rosters_per_nurse_per_iteration))
 
                 new_roster_indices = df.rosterIndex.values[random_numbers]
-                self.roster_indices[nurse_hours] = self.roster_indices[nurse_hours].union(set(new_roster_indices))
+                self.roster_indices[nurse_hours, last_roster_index] = self.roster_indices[nurse_hours, last_roster_index].union(set(new_roster_indices))
 
             object_value = solver.Objective().Value()
             if verbose:

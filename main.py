@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import pickle
+import json
 
 from master_problem import master_problem_instance
 from helpers import get_demand, calculate_parameters
@@ -8,8 +8,9 @@ from roster_factory import RosterFactory
 from partial_roster import PartialRoster
 
 
-n_weeks = 1  # works for 1 week with nurse_type from bla
-read_roster_df = False
+n_weeks = 2  # works for 1 week with nurse_type from bla
+read_roster_df = True
+use_start_conditions_from_first_two_weeks = True
 
 use_initial_solution = True
 max_iter = 5
@@ -34,7 +35,11 @@ demand = get_demand(base_demand, n_weeks)
 nurse_df_base = pd.read_excel(base_path + 'data/NurseData.xlsx', sheet_name="personindstillinger")
 nurse_df = nurse_df_base.groupby(['nurseHours', 'nurseLevel']).agg(nurseCount=('Person', 'count')).reset_index()\
     .rename_axis('nurseType').reset_index()
+nurse_df['lastRosterIndex'] = -1  # means all rosters are available
 nurse_df.nurseCount *= nurse_df_multiplier
+
+# make nurse_df from initial solution
+
 
 
 # quick check of demand vs supply
@@ -50,39 +55,36 @@ cost_parameters, feasibility_parameters = calculate_parameters(n_weeks, n_work_s
 
 roster_factory = RosterFactory(n_weeks, n_work_shifts, nurse_df, cost_parameters, feasibility_parameters)
 
+roster1_df = roster_factory.read_roster_df_from_parquet(parquet_filename=f'{base_path}data/1WeekRosters.parquet')
 if read_roster_df:
     roster_df = roster_factory.read_roster_df_from_parquet(parquet_filename)
 else:
     roster_df = roster_factory.calculate_roster_df()
-    # write out solution
-    roster_df.columns = [str(colname) for colname in roster_df.columns]  # write df to parquet
+    roster_df.columns = [str(colname) for colname in roster_df.columns]
+
+    # create 2 week roster df with 1week rosters matching
+    roster_df = roster_factory.append_one_week_roster_index_to_two_week_roster_df(roster1_df)
     roster_df.to_parquet(parquet_filename, index=False)
 
-roster_factory.create_roster_matching()
+if use_start_conditions_from_first_two_weeks:
+    roster_matching_file = f'data/1WeekRosterMatching.json'
+    if n_weeks == 1:
+        roster_factory.calculate_roster_matching()
+        # serialize roster matching
+        with open(roster_matching_file, 'w') as fp:
+            json.dump(roster_factory.roster_matching, fp)
+    else:
+        # deserialize roster matching
+        with open(roster_matching_file, 'r') as fp:
+            roster_factory.roster_matching = json.load(fp)
 
-# create 2 week roster df with 1week rosters matching
-roster2_df = roster_factory.read_roster_df_from_parquet(parquet_filename=f'{base_path}data/2WeekRosters.parquet')
-first_week_cols = [str(x) for x in np.arange(7)]
-second_week_cols = [str(x) for x in np.arange(7, 14)]
-df = roster2_df.merge(roster_df.rename(columns={'rosterIndex': 'rosterIndex1'})[first_week_cols+['nurseHours', 'rosterIndex1']],
-                 how='inner', on=['nurseHours']+first_week_cols)\
-          .merge(roster_df.rename(columns={'rosterIndex': 'rosterIndex2', **{col: str(int(col)+7) for col in first_week_cols}})
-                      [second_week_cols+['nurseHours', 'rosterIndex2']],
-                 how='inner', on=['nurseHours']+second_week_cols)
-print('df shape: ', df.shape)
-
-roster_factory.roster_matching
-
-# serialize roster matching
-import json
-with open(f'data/{n_weeks}WeekRosterMatching.json', 'w') as fp:
-    json.dump(roster_factory.roster_matching, fp)
-
-n_largest_for_each_nurse = 3  # necessary with 3 to get full 0s, 1s, and 2s plans
-n_smallest_for_each_nurse = 5 ** n_weeks
-
+    # create nurse_df from solution file
+    roster_solution_df = pd.read_parquet(f'{base_path}data/{n_weeks}RosterSolution.parquet')
+    #  nurse_df = 2  create nurse_df here
 
 if use_initial_solution:
+    n_largest_for_each_nurse = 3  # necessary with 3 to get full 0s, 1s, and 2s plans
+    n_smallest_for_each_nurse = 5 ** n_weeks
     roster_indices, binary_plans, roster_costs = roster_factory.initial_solution_for_cg(n_largest_for_each_nurse,
                                                                                         n_smallest_for_each_nurse)
 else:  # full set of rosters solution
@@ -119,6 +121,8 @@ if status == 0:
     roster_solution_df = roster_factory.roster_df.merge(r_indices_df, how='inner', on=['rosterIndex', 'nurseHours'])
     print(roster_solution_df.loc[:, [str(x) for x in np.arange(n_days)]])
 
+    roster_solution_df[['nurseHours', 'nurseLevel', 'rosterIndexWeek1', 'rosterIndexWeek2', 'nRostersInSolution']]
+    roster_solution_df.to_parquet(f'data/{n_weeks}RosterSolution.parquet', index=False)
 
 # patch 2 rosters together
 cost_parameters, feasibility_parameters = calculate_parameters(2 * n_weeks, n_work_shifts, nurse_df, base_demand,
