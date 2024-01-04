@@ -43,8 +43,9 @@ def master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices, ros
 
 #@timer()
 def create_objective(nurse_df, roster_indices, roster_costs, solver, z):
-    obj = solver.Sum([z[nurse_type, roster_idx] * roster_costs[roster_idx] for nurse_type in nurse_df.nurseType.values
-                      for roster_idx in roster_indices[nurse_type]])
+    obj = solver.Sum([z[nurse_hours, nurse_level, roster_idx] * roster_costs[roster_idx]
+                      for nurse_hours, nurse_level in nurse_df[['nurseHours', 'nurseLevel']].itertuples(index=False)
+                      for roster_idx in roster_indices[nurse_hours]])
     return obj
 
 
@@ -52,9 +53,9 @@ def create_objective(nurse_df, roster_indices, roster_costs, solver, z):
 def advanced_nurses_demand_constraint(binary_plans, demand_advanced_nurse_level, n_days, n_work_shifts, nurse_df,
                                       roster_indices, solver, z):
     demand_advanced_nurse_level_c = {
-        (j, k): solver.Add(solver.Sum([z[nurse_type, roster_idx] * binary_plans[roster_idx][j, k]
-                                       for nurse_type in nurse_df[nurse_df['nurseLevel'] == 3].nurseType.values
-                                       for roster_idx in roster_indices[nurse_type]])
+        (j, k): solver.Add(solver.Sum([z[nurse_hours, nurse_level, roster_idx] * binary_plans[roster_idx][j, k]
+                                       for nurse_hours, nurse_level in nurse_df[nurse_df['nurseLevel'] == 3][['nurseHours', 'nurseLevel']].itertuples(index=False)
+                                       for roster_idx in roster_indices[nurse_hours]])
                            >= demand_advanced_nurse_level, name=f"demand_advanced_nurse_level_{j}_{k}") for j in
         range(n_days) for k in range(n_work_shifts)}
     return demand_advanced_nurse_level_c
@@ -62,9 +63,9 @@ def advanced_nurses_demand_constraint(binary_plans, demand_advanced_nurse_level,
 
 #@timer()
 def all_nurses_demand_constraint(binary_plans, demand, n_days, n_work_shifts, nurse_df, roster_indices, solver, z):
-    demand_c = {(j, k): solver.Add(solver.Sum([z[nurse_type, roster_idx] * binary_plans[roster_idx][j, k]
-                                               for nurse_type in nurse_df.nurseType.values
-                                               for roster_idx in roster_indices[nurse_type]])
+    demand_c = {(j, k): solver.Add(solver.Sum([z[nurse_hours, nurse_level, roster_idx] * binary_plans[roster_idx][j, k]
+                                               for nurse_hours, nurse_level in nurse_df[['nurseHours', 'nurseLevel']].itertuples(index=False)
+                                               for roster_idx in roster_indices[nurse_hours]])
                                    >= demand[k, j], name=f"demand_{j}_{k}")
                 for j in range(n_days) for k in range(n_work_shifts)}
     return demand_c
@@ -73,22 +74,22 @@ def all_nurses_demand_constraint(binary_plans, demand, n_days, n_work_shifts, nu
 #@timer()
 def n_rosters_must_match_nurse_count_constraint(nurse_df, roster_indices, solver, z):
     nurse_c = dict()
-    for nurse_type, nurse_count in nurse_df[['nurseType', 'nurseCount']].itertuples(index=False):
-        nurse_c[nurse_type] = solver.Add(solver.Sum([z[nurse_type, roster_idx]
-                                                     for roster_idx in roster_indices[nurse_type]])
-                                         == nurse_count, name=f"nurse_{nurse_type}")
+    for nurse_hours, nurse_level, nurse_count in nurse_df[['nurseHours', 'nurseLevel', 'nurseCount']].itertuples(index=False):
+        nurse_c[nurse_hours, nurse_level] = solver.Add(solver.Sum([z[nurse_hours, nurse_level, roster_idx]
+                                                     for roster_idx in roster_indices[nurse_hours]])
+                                         == nurse_count, name=f"nurse_{nurse_hours}_{nurse_level}")
     return nurse_c
 
 
 #@timer()
 def create_decision_variables(nurse_df, roster_indices, solver, solver_id):
     z = {}
-    for nurse_type in nurse_df.nurseType.unique():
-        for roster_idx in roster_indices[nurse_type]:
+    for nurse_hours, nurse_level in nurse_df[['nurseHours', 'nurseLevel']].itertuples(index=False):
+        for roster_idx in roster_indices[nurse_hours]:
             if solver_id == 'GLOP':
-                z[nurse_type, roster_idx] = solver.NumVar(name=f'z_{nurse_type},{roster_idx}', lb=0,
+                z[nurse_hours, nurse_level, roster_idx] = solver.NumVar(name=f'z_{nurse_hours},{nurse_level},{roster_idx}', lb=0,
                                                           ub=float(nurse_df['nurseCount'].sum()))
             else:  # solver_id == 'CBC'
-                z[nurse_type, roster_idx] = solver.IntVar(name=f'z_{nurse_type},{roster_idx}', lb=0,
+                z[nurse_hours, nurse_level, roster_idx] = solver.IntVar(name=f'z_{nurse_hours},{nurse_level},{roster_idx}', lb=0,
                                                           ub=float(nurse_df['nurseCount'].sum()))
     return z

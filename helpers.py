@@ -3,6 +3,7 @@ from functools import wraps
 from time import time
 
 OFF_SHIFT = 3
+MAX_CONSECUTIVE_WORK_SHIFTS = 5
 
 COSTS = {
     'consecutiveShifts': -0.04,
@@ -148,13 +149,15 @@ def get_best_nurseTypes_sorted_low_to_high(beta, beta_dict=None):
 def calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand, hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor):
     weekend_shifts_per_week = sum(
         [base_demand[k, j] for j in range(7) for k in range(n_work_shifts) if is_weekend(j, k)])
-    night_shifts = sum(base_demand[2, :])
+    night_shifts_per_week = sum(base_demand[2, :])
 
     shift_length_in_hours = 8
-    avg_weekend_shifts_per_person_per_period = 1.0 * weekend_shifts_per_week / sum(nurse_df['nurseCount'].values) * n_weeks
-    avg_shifts_per_period = nurse_df['nurseHours'].values / shift_length_in_hours * n_weeks
-    total_shifts_available_per_period = sum(avg_shifts_per_period * nurse_df['nurseCount'].values)
-    hard_shift_fair_per_period = avg_shifts_per_period * night_shifts / total_shifts_available_per_period * n_weeks
+    avg_weekend_shifts_per_person_per_period = 1.0 * weekend_shifts_per_week / sum(nurse_df['nurseCount']) * n_weeks
+    avg_shifts_per_period = {nurse_hours: nurse_hours / shift_length_in_hours * n_weeks
+                             for nurse_hours in nurse_df.nurseHours.unique()}
+    total_shifts_available_per_period = sum(nurse_df['nurseHours'] / shift_length_in_hours * nurse_df['nurseCount'] * n_weeks)
+    hard_shift_fair_per_period = {nurse_hours: avg_shifts_per_period / total_shifts_available_per_period * night_shifts_per_week * n_weeks
+                                  for nurse_hours, avg_shifts_per_period in avg_shifts_per_period.items()}
 
     cost_parameters = CostParameters(hard_shift_fair_per_period, avg_weekend_shifts_per_person_per_period,
                                      hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor)

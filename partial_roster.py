@@ -5,10 +5,10 @@ from helpers import is_weekend, COSTS as cost_elements, FeasibilityParameters, C
 
 
 class PartialRoster(object):
-    def __init__(self, n_days: int, nurse_type: int, n_work_shifts: int,
+    def __init__(self, n_days: int, nurse_hours: int, n_work_shifts: int,
                  cost_parameters: CostParameters, feasibility_parameters: FeasibilityParameters):
         self.n_days = n_days
-        self.nurse_type = nurse_type
+        self.nurse_hours = nurse_hours
         self.n_work_shifts = n_work_shifts
         self.day = 0  # [0, ..., n_days-1]
         self.plan = []
@@ -109,7 +109,7 @@ class PartialRoster(object):
         return allowed_shifts
 
     def worked_too_much_per_period_constraints(self, allowed_shifts):
-        if self.work_shifts_total > self.feasibility_parameters.avg_shifts_per_period[self.nurse_type] + 1:
+        if self.work_shifts_total > self.feasibility_parameters.avg_shifts_per_period[self.nurse_hours] + 1:
             allowed_shifts = allowed_shifts[allowed_shifts == OFF_SHIFT]
         return allowed_shifts
 
@@ -165,7 +165,7 @@ class PartialRoster(object):
 
         start_value = 0 if current_or_next == 'current' else 1  # then its == 'next'
         cp = self.cost_parameters
-        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_type]
+        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_hours]
 
         ce = copy.deepcopy(cost_elements)
         ce['afternoonShiftsFair'] = cp.hard_shifts_fair_plans_factor * \
@@ -187,7 +187,7 @@ class PartialRoster(object):
         cp = self.cost_parameters
         ce = self.calc_fair_costs(current_or_next='next')
 
-        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_type]
+        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_hours]
 
         costs = []
         for k in feasible_shifts:
@@ -227,7 +227,7 @@ class PartialRoster(object):
     def calculate_fair_costs(self):
 
         cp = self.cost_parameters
-        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_type]
+        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_hours]
 
         costs = {'afternoonShiftsFair': cp.hard_shifts_fair_plans_factor * \
                                           max(0, self.afternoon_shift_total - hard_shift_fair) \
@@ -260,7 +260,7 @@ class PartialRoster(object):
 
     def __str__(self):
         if self.day == self.n_days:
-            s = f'Finished Roster with plan: {self.plan} for nurse type {self.nurse_type} and work weekend ' \
+            s = f'Finished Roster with plan: {self.plan} for nurse hours {self.nurse_hours} and work weekend ' \
                 f'{self.is_work_weekend}'
         else:
             s = f'Unfinished Roster with plan: {self.plan} and\n' \

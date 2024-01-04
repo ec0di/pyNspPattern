@@ -8,11 +8,11 @@ from roster_factory import RosterFactory
 from partial_roster import PartialRoster
 
 
-n_weeks = 2  # works for 1 week with nurse_type from bla
-read_roster_df = True
+n_weeks = 1  # works for 1 week with nurse_type from bla
+read_roster_df = False
 
 use_initial_solution = True
-max_iter = 2
+max_iter = 5
 n_rosters_per_nurse_per_iteration = 5 ** n_weeks
 
 n_work_shifts = 3
@@ -60,6 +60,24 @@ else:
 
 roster_factory.create_roster_matching()
 
+# create 2 week roster df with 1week rosters matching
+roster2_df = roster_factory.read_roster_df_from_parquet(parquet_filename=f'{base_path}data/2WeekRosters.parquet')
+first_week_cols = [str(x) for x in np.arange(7)]
+second_week_cols = [str(x) for x in np.arange(7, 14)]
+df = roster2_df.merge(roster_df.rename(columns={'rosterIndex': 'rosterIndex1'})[first_week_cols+['nurseHours', 'rosterIndex1']],
+                 how='inner', on=['nurseHours']+first_week_cols)\
+          .merge(roster_df.rename(columns={'rosterIndex': 'rosterIndex2', **{col: str(int(col)+7) for col in first_week_cols}})
+                      [second_week_cols+['nurseHours', 'rosterIndex2']],
+                 how='inner', on=['nurseHours']+second_week_cols)
+print('df shape: ', df.shape)
+
+roster_factory.roster_matching
+
+# serialize roster matching
+import json
+with open(f'data/{n_weeks}WeekRosterMatching.json', 'w') as fp:
+    json.dump(roster_factory.roster_matching, fp)
+
 n_largest_for_each_nurse = 3  # necessary with 3 to get full 0s, 1s, and 2s plans
 n_smallest_for_each_nurse = 5 ** n_weeks
 
@@ -94,11 +112,11 @@ solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_insta
 if status == 0:
     z_int = {key: value.solution_value() for key, value in z.items()}
 
-    r_indices_df = pd.DataFrame([key[0], key[1], value] for key, value in z_int.items() if value >= 1)
-    r_indices_df.columns = ['nurseType', 'rosterIndex', 'nRostersInSolution']
+    r_indices_df = pd.DataFrame([key[0], key[1], key[2], value] for key, value in z_int.items() if value >= 1)
+    r_indices_df.columns = ['nurseHours', 'nurseLevel', 'rosterIndex', 'nRostersInSolution']
 
     # nice to remember: .loc[lambda x: x.nurseType == 2]
-    roster_solution_df = roster_factory.roster_df.merge(r_indices_df, how='inner', on=['rosterIndex', 'nurseType'])
+    roster_solution_df = roster_factory.roster_df.merge(r_indices_df, how='inner', on=['rosterIndex', 'nurseHours'])
     print(roster_solution_df.loc[:, [str(x) for x in np.arange(n_days)]])
 
 
@@ -108,7 +126,7 @@ cost_parameters, feasibility_parameters = calculate_parameters(2 * n_weeks, n_wo
                                                                weekend_shifts_fair_plan_factor)
 
 base_roster = PartialRoster(n_days=2 * n_days,
-                            nurse_type=5,
+                            nurse_hours=37,
                             n_work_shifts=n_work_shifts,
                             cost_parameters=cost_parameters,
                             feasibility_parameters=feasibility_parameters)
