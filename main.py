@@ -66,14 +66,6 @@ else:
     roster_df = roster_factory.append_one_week_roster_index_to_two_week_roster_df(roster1_df)
     roster_df.to_parquet(parquet_filename, index=False)
 
-# downcast to save memory
-roster_df = (
-    roster_df
-    .apply(pd.to_numeric, downcast="float")
-    .apply(pd.to_numeric, downcast="integer")
-    .apply(pd.to_numeric, downcast="unsigned")
-)
-
 
 if use_start_conditions_from_first_two_weeks:
     roster_matching_file = f'data/1WeekRosterMatching.json'

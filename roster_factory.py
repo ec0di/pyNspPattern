@@ -88,8 +88,18 @@ class RosterFactory:
         roster_df = roster_df.reset_index(drop=True)
 
         self.roster_df = roster_df
+        self.downcast_roster_df()
 
         return self.roster_df
+
+    def downcast_roster_df(self):
+        """downcast to save memory"""
+        self.roster_df = (
+            self.roster_df
+            .apply(pd.to_numeric, downcast="float")
+            .apply(pd.to_numeric, downcast="integer")
+            .apply(pd.to_numeric, downcast="unsigned")
+        )
 
     @timer()
     def calculate_roster_matching(self):
@@ -132,6 +142,7 @@ class RosterFactory:
 
     def read_roster_df_from_parquet(self, parquet_filename):
         self.roster_df = pd.read_parquet(parquet_filename)
+        self.downcast_roster_df()
         return self.roster_df
 
     def initial_solution_for_cg(self, n_largest_for_each_nurse, n_smallest_for_each_nurse):
