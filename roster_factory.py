@@ -97,6 +97,10 @@ class RosterFactory:
                            for rosterIndex in self.roster_df.rosterIndex}
         for nurse_hours in self.nurse_df.nurseHours.unique():
             roster_df_ = self.roster_df[self.roster_df.nurseHours == nurse_hours]
+            # append all rosters to roster_matching index -1
+
+
+            # append the rest of the relevant rosters to roster_matching
             for roster_1 in roster_df_.itertuples(index=False):
                 for roster_2 in roster_df_.itertuples(index=False):
                     # last_shift_constraints:
@@ -133,10 +137,10 @@ class RosterFactory:
     def initial_solution_for_cg(self, n_largest_for_each_nurse, n_smallest_for_each_nurse):
         """This initial solution contains expensive 0s ,1s and 2s plans for all nurse types along with a set of the
         cheapest plans for all nurse types"""
-        roster_largest_cost_df = self.roster_df.merge(self.roster_df.rename_axis('rosterIndex').groupby('nurseHours')['totalCost']
-                                                 .nlargest(n_largest_for_each_nurse).reset_index().drop(
-            columns=['totalCost']),
-                                                 how='inner', on=['nurseHours', 'rosterIndex'])
+        roster_largest_cost_df = self.roster_df.merge(
+            self.roster_df.rename_axis('rosterIndex').groupby('nurseHours')['totalCost']
+            .nlargest(n_largest_for_each_nurse).reset_index().drop(columns=['totalCost']),
+            how='inner', on=['nurseHours', 'rosterIndex'])
         largest_cost_array = np.tile(np.concatenate([0 * np.ones((1, self.n_days)),
                                                      1 * np.ones((1, self.n_days)),
                                                      2 * np.ones((1, self.n_days))]),
@@ -145,13 +149,19 @@ class RosterFactory:
         roster_largest_cost_df['rosterIndex'] = np.arange(self.roster_df.shape[0],
                                                           self.roster_df.shape[0] + roster_largest_cost_df.shape[0])
         roster_largest_cost_df['totalCost'] = 9999
-        roster_smallest_cost_df = self.roster_df.merge(
-            self.roster_df.rename_axis('rosterIndex').groupby('nurseHours')['totalCost']
-            .nsmallest(n_smallest_for_each_nurse).reset_index().drop(columns=['totalCost']),
-            how='inner', on=['nurseHours', 'rosterIndex'])
+        #roster_smallest_cost_df = self.roster_df.merge(
+        #    self.roster_df.rename_axis('rosterIndex').groupby(['nurseHours'])['totalCost']
+        #    .nsmallest(n_smallest_for_each_nurse).reset_index().drop(columns=['totalCost']),
+        #    how='inner', on=['nurseHours', 'rosterIndex'])
+        roster_smallest_cost_df = self.roster_df.sort_values(['nurseHours', 'totalCost'])
         roster_indices = dict()
+        # todo, some filterring here
         for nurse_hours, last_roster_index in self.nurse_df.groupby(['nurseHours', 'lastRosterIndex']).groups.keys():
-            small_cost_set = set(roster_smallest_cost_df[roster_smallest_cost_df.nurseHours == nurse_hours].rosterIndex)
+            # todo, one more filter here on last_roster_index via nurse_df and roster_matching
+            small_cost_df = roster_smallest_cost_df[roster_smallest_cost_df.nurseHours == nurse_hours]
+            if self.roster_matching and last_roster_index != -1:
+                small_cost_df = small_cost_df[small_cost_df.rosterIndexWeek1.isin(self.roster_matching[last_roster_index]['rostersAllowedAfter'])]
+            small_cost_set = set(small_cost_df[:min(n_smallest_for_each_nurse, small_cost_df.shape[0])].rosterIndex)
             large_cost_set = set(roster_largest_cost_df[roster_largest_cost_df.nurseHours == nurse_hours].rosterIndex)
             roster_indices[nurse_hours, last_roster_index] = small_cost_set.union(large_cost_set)
 
@@ -220,7 +230,10 @@ class RosterFactory:
 
             # np.array([const.dual_value() for const in nurse_c.values()])
             # np.array([const.dual_value() for const in demand_comp_level_c.values()]).reshape((n_days, n_work_shifts))
+            solver.Objective().Value()
             demand_duals = np.array([const.dual_value() for const in demand_c.values()]).reshape(
+                (self.n_days, self.n_work_shifts))
+            demand_duals = np.array([const.dual_value() for const in demand_comp_level_c.values()]).reshape(
                 (self.n_days, self.n_work_shifts))
             id_max = tuple(np.unravel_index(demand_duals.argmax(), demand_duals.shape))
 
@@ -229,6 +242,8 @@ class RosterFactory:
                 # lowest_cost_roster_index = np.arange(0, n_rosters_per_nurse_per_iteration)
                 df = roster_df_[roster_df_.nurseHours == nurse_hours]
                 df = df[df[f'day{id_max[0]}_shift{id_max[1]}']]
+                if self.roster_matching and last_roster_index != -1:
+                    df = df[df.rosterIndexWeek1.isin(self.roster_matching[last_roster_index]['rostersAllowedAfter'])]
                 # random numbers
                 n_rosters_left = df.shape[0]
                 random_numbers = random.sample(range(0, n_rosters_left),

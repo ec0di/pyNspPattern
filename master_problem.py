@@ -75,9 +75,9 @@ def all_nurses_demand_constraint(binary_plans, demand, n_days, n_work_shifts, nu
 def n_rosters_must_match_nurse_count_constraint(nurse_df, roster_indices, solver, z):
     nurse_c = dict()
     for nurse_hours, nurse_level, nurse_count, last_roster_index in nurse_df[['nurseHours', 'nurseLevel', 'nurseCount', 'lastRosterIndex']].itertuples(index=False):
-        nurse_c[nurse_hours, nurse_level] = solver.Add(solver.Sum([z[nurse_hours, nurse_level, roster_idx]
+        nurse_c[nurse_hours, nurse_level, last_roster_index] = solver.Add(solver.Sum([z[nurse_hours, nurse_level, roster_idx]
                                                      for roster_idx in roster_indices[nurse_hours, last_roster_index]])
-                                         == nurse_count, name=f"nurse_{nurse_hours}_{nurse_level}")
+                                         == nurse_count, name=f"nurse_{nurse_hours}_{nurse_level}_{last_roster_index}")
     return nurse_c
 
 
@@ -86,10 +86,11 @@ def create_decision_variables(nurse_df, roster_indices, solver, solver_id):
     z = {}
     for nurse_hours, nurse_level, last_roster_index in nurse_df[['nurseHours', 'nurseLevel', 'lastRosterIndex']].itertuples(index=False):
         for roster_idx in roster_indices[nurse_hours, last_roster_index]:
-            if solver_id == 'GLOP':
-                z[nurse_hours, nurse_level, roster_idx] = solver.NumVar(name=f'z_{nurse_hours},{nurse_level},{roster_idx}', lb=0,
-                                                          ub=float(nurse_df['nurseCount'].sum()))
-            else:  # solver_id == 'CBC'
-                z[nurse_hours, nurse_level, roster_idx] = solver.IntVar(name=f'z_{nurse_hours},{nurse_level},{roster_idx}', lb=0,
+            if (nurse_hours, nurse_level, roster_idx) not in z:
+                if solver_id == 'GLOP':
+                    z[nurse_hours, nurse_level, roster_idx] = solver.NumVar(name=f'z_{nurse_hours}_{nurse_level}_{roster_idx}', lb=0,
+                                                              ub=float(nurse_df['nurseCount'].sum()))
+                else:  # solver_id == 'CBC'
+                    z[nurse_hours, nurse_level, roster_idx] = solver.IntVar(name=f'z_{nurse_hours}_{nurse_level}_{roster_idx}', lb=0,
                                                           ub=float(nurse_df['nurseCount'].sum()))
     return z
