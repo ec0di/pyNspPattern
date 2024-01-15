@@ -3,5 +3,4 @@
 Solves the NSP with week patterns
 
 Todo
-* write nurse_df from solution
-* roster_indices should only add rosters from roster matching in column generation
+* roster_matching should take last_index and nurse_hours as index -> makes it possible to shrink roster_df to contain unique rosters + 

@@ -8,7 +8,7 @@ np.set_printoptions(linewidth=desired_width)
 pd.set_option('display.max_columns', None)
 
 
-base_path = 'data/2WeekRosterSolution'
+base_path = 'data/2WeekRosterSolutionOptimal'
 
 roster_solution1_df = pd.read_parquet(f'{base_path}StartCondition.parquet').\
     assign(lastOneWeekRosterIndex=lambda x: x.rosterIndexWeek2,
@@ -19,7 +19,7 @@ nurse1_df = roster_solution1_df.\
     agg(nurseCount=('nRostersInSolution', 'sum')).reset_index().astype({'nurseCount': 'int32'})
 
 roster_solution2_df = pd.read_parquet(f'{base_path}.parquet')
-nurse2_df = roster_solution2_df.groupby(['nurseHours', 'nurseLevel', 'lastOneWeekRosterIndex']).\
+nurse2_df = roster_solution2_df.groupby(['nurseHours', 'nurseLevel', 'lastOneWeekRosterIndex', 'lastTwoWeekRosterIndex']).\
     agg(nurseCount=('nRostersInSolution', 'sum')).reset_index().astype({'nurseCount': 'int32'})
 
 

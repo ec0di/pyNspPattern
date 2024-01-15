@@ -5,7 +5,7 @@ import pandas as pd
 from contexttimer import timer
 from time import time
 
-from helpers import list_to_binary_array, MAX_CONSECUTIVE_WORK_SHIFTS
+from helpers import list_to_binary_array, MAX_CONSECUTIVE_WORK_SHIFTS, OFF_SHIFT
 from partial_roster import PartialRoster
 from master_problem import master_problem_instance
 
@@ -121,7 +121,7 @@ class RosterFactory:
                         continue
                     # worked_too_many_day_consecutive_constraints:
                     try:
-                        work_days_consecutive_start_2 = np.where(roster_2[0:MAX_CONSECUTIVE_WORK_SHIFTS])[0][0]
+                        work_days_consecutive_start_2 = np.where(np.array(roster_2[0:MAX_CONSECUTIVE_WORK_SHIFTS])==OFF_SHIFT)[0][0]
                     except:
                         work_days_consecutive_start_2 = MAX_CONSECUTIVE_WORK_SHIFTS
                     if roster_1.workDaysConsecutive + work_days_consecutive_start_2 > MAX_CONSECUTIVE_WORK_SHIFTS:
@@ -252,6 +252,7 @@ class RosterFactory:
             roster_df_ = self.roster_df[~self.roster_df.rosterIndex.isin(set.union(*list(self.roster_indices.values())))]
             for nurse_hours, last_one_week_roster_index in nurse_df_groups.keys():
                 # lowest_cost_roster_index = np.arange(0, n_rosters_per_nurse_per_iteration)
+                # convert nurseHours filter to minNumberOfShifts and maxNumberOfShifts filters
                 df = roster_df_[roster_df_.nurseHours == nurse_hours]
                 df = df[df[f'day{id_max[0]}_shift{id_max[1]}']]
                 if self.roster_matching and last_one_week_roster_index != -1:

@@ -2,6 +2,7 @@ pandas
 numpy
 ortools
 openpyxl
+plotly
 pyarrow==11.0.0
 fastparquet
 contexttimer

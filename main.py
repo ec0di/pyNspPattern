@@ -7,18 +7,19 @@ from helpers import get_demand, calculate_parameters
 from roster_factory import RosterFactory
 
 
-n_weeks = 2  # works for 1 week with nurse_type from bla
+n_weeks = 1  # works for 1 week with nurse_type from bla
 read_roster_df = True
 use_start_conditions_from_first_two_weeks = True
-use_initial_solution = True
+use_initial_solution = False
+base_path = ''
+start_condition_filename = f'{base_path}data/{n_weeks}WeekRosterSolutionOptimal'
 
-max_time_sec = 10
+max_time_sec = 30
 max_iter = 1000
 n_rosters_per_iteration = 300
 
 n_work_shifts = 3
 n_days = n_weeks * 7
-base_path = ''
 parquet_filename = f'{base_path}data/{n_weeks}WeekRosters.parquet'
 nurse_df_multiplier = 4
 
@@ -79,7 +80,7 @@ if use_start_conditions_from_first_two_weeks:
             roster_factory.roster_matching = {int(key): value for key, value in roster_matching.items()}
 
     # create nurse_df from solution file
-    roster_solution_df = pd.read_parquet(f'{base_path}data/{n_weeks}WeekRosterSolutionStartCondition.parquet')
+    roster_solution_df = pd.read_parquet(f'{start_condition_filename}StartCondition.parquet')
     nurse_df = roster_solution_df.assign(lastOneWeekRosterIndex=lambda x: x.rosterIndexWeek2,
                                          lastTwoWeekRosterIndex=lambda x: x.rosterIndex).\
         groupby(['nurseHours', 'nurseLevel', 'lastOneWeekRosterIndex', 'lastTwoWeekRosterIndex']).\
