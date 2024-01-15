@@ -10,10 +10,10 @@ from roster_factory import RosterFactory
 n_weeks = 2  # works for 1 week with nurse_type from bla
 read_roster_df = True
 use_start_conditions_from_first_two_weeks = True
-
-max_time_sec = 30
-max_iter = 1000
 use_initial_solution = True
+
+max_time_sec = 10
+max_iter = 1000
 n_rosters_per_iteration = 300
 
 n_work_shifts = 3
@@ -31,10 +31,9 @@ base_demand *= nurse_df_multiplier
 
 demand = get_demand(base_demand, n_weeks)
 
-# read in solution
-nurse_df_base = pd.read_excel(base_path + 'data/NurseData.xlsx', sheet_name="personindstillinger")
-nurse_df = nurse_df_base.groupby(['nurseHours', 'nurseLevel']).agg(nurseCount=('Person', 'count')).reset_index()\
-    .rename_axis('nurseType').reset_index()
+nurse_df = pd.DataFrame({'nurseHours': [28, 28, 32, 32, 37, 37],
+                         'nurseLevel': [1, 3, 1, 3, 1, 3],
+                         'nurseCount': [1, 1, 1, 4, 4, 3]})
 nurse_df['lastOneWeekRosterIndex'] = -1  # means all rosters are available
 nurse_df['lastTwoWeekRosterIndex'] = -1  # means all rosters are available
 nurse_df.nurseCount *= nurse_df_multiplier
@@ -73,7 +72,7 @@ if use_start_conditions_from_first_two_weeks:
         # serialize roster matching
         with open(roster_matching_file, 'w') as fp:
             json.dump(roster_factory.roster_matching, fp)
-    else:
+    elif n_weeks == 2:
         # deserialize roster matching
         with open(roster_matching_file, 'r') as fp:
             roster_matching = json.load(fp)
@@ -92,17 +91,18 @@ if use_initial_solution:
     n_smallest_for_each_nurse = 5 ** n_weeks
     roster_indices, binary_plans, roster_costs = roster_factory.initial_solution_for_cg(n_largest_for_each_nurse,
                                                                                         n_smallest_for_each_nurse)
+
+    roster_factory.run_column_generation(verbose=True,
+                                         demand=demand,
+                                         max_time_sec=max_time_sec,
+                                         max_iter=max_iter,
+                                         min_object_value=15,
+                                         n_rosters_per_iteration=n_rosters_per_iteration,
+                                         solver_id='GLOP',
+                                         max_time_per_iteration_sec=300)
+
 else:  # full set of rosters solution
     roster_indices, binary_plans, roster_costs = roster_factory.full_solution_for_mip()
-
-roster_factory.run_column_generation(verbose=True,
-                                     demand=demand,
-                                     max_time_sec=max_time_sec,
-                                     max_iter=max_iter,
-                                     min_object_value=15,
-                                     n_rosters_per_iteration=n_rosters_per_iteration,
-                                     solver_id='GLOP',
-                                     max_time_per_iteration_sec=300)
 
 # run final master problem with MIP
 solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_instance(n_days=n_days,
@@ -112,9 +112,9 @@ solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_insta
                                                                                     roster_costs=roster_factory.roster_costs,
                                                                                     binary_plans=roster_factory.binary_plans,
                                                                                     demand=demand,
-                                                                                    max_time_solver_sec=300, solver_id='CBC')
+                                                                                    max_time_solver_sec=1000, solver_id='CBC')
 
-if status == 0:
+if status == 0:  # optimal solution found
     z_int = {key: value.solution_value() for key, value in z.items()}
 
     r_indices_df = pd.DataFrame(list(keys)+[value] for keys, value in z_int.items() if value >= 1)
@@ -123,6 +123,7 @@ if status == 0:
     # nice to remember: .loc[lambda x: x.nurseType == 2]
     roster_solution_df = roster_factory.roster_df.merge(r_indices_df, how='inner', on=['nurseHours', 'rosterIndex'])
     print(roster_solution_df.loc[:, [str(x) for x in np.arange(n_days)]])
-    roster_solution_df.to_parquet(f'data/{n_weeks}WeekRosterSolution.parquet', index=False)
+    path = f'data/{n_weeks}WeekRosterSolutionOptimal'
+    roster_solution_df.to_parquet(path + '.parquet', index=False)
     if not use_start_conditions_from_first_two_weeks:
-        roster_solution_df.to_parquet(f'data/{n_weeks}WeekRosterSolutionStartCondition.parquet', index=False)
+        roster_solution_df.to_parquet(path + 'StartCondition.parquet', index=False)

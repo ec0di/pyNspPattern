@@ -182,8 +182,8 @@ class RosterFactory:
         return self.roster_indices, self.binary_plans, self.roster_costs
 
     def full_solution_for_mip(self):
-        self.roster_indices = {nurse_hours: set(self.roster_df[self.roster_df.nurseHours == nurse_hours].rosterIndex.values)
-                               for nurse_hours in self.nurse_df.nurseHours.unique()}
+        self.roster_indices = {(nurse_hours, last_one_week_roster_index): set(self.roster_df[self.roster_df.nurseHours == nurse_hours].rosterIndex.values)
+                               for nurse_hours, last_one_week_roster_index in self.nurse_df[['nurseHours', 'lastOneWeekRosterIndex']].itertuples(index=False)}
         self.binary_plans = self.calculate_binary_plans()
         self.roster_costs = self.roster_df.set_index('rosterIndex')['totalCost'].to_dict()
         return self.roster_indices, self.binary_plans, self.roster_costs

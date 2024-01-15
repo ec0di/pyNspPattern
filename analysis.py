@@ -37,3 +37,22 @@ total_cost = total_cost1 + total_cost2
 fig = px.imshow(four_week_solution_df[[str(i) for i in range(14*2)]], color_continuous_scale=["blue", "green", "red", 'yellow'],
                 title=f'Total cost: {total_cost:.0f}, Total cost1: {total_cost1:.0f}, Total cost2: {total_cost2:.0f}')
 fig.show()
+
+# plot demand
+day_columns = [str(i) for i in range(14)]
+df = four_week_solution_df[['nurseLevel']+day_columns]
+df.groupby(['nurseLevel']).value_counts().reset_index()
+
+for i in range(14):
+    df[f'week{i}'] = df[str(i)].value_counts().sort_index()
+df[['1']]
+
+dfs = []
+for i in range(14):
+    col = str(i)
+    dfs.append(
+        df.groupby('nurseLevel')[[col]].value_counts().sort_index().reset_index().loc[lambda x: x[col] != 3].drop(columns=[col]).rename(columns={'count': col})
+    )
+pd.concat(dfs, axis=1)
+
+df.groupby('nurseLevel', as_index=True).value_counts()

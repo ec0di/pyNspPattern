@@ -1,3 +1,8 @@
+# read in solution
+nurse_df_base = pd.read_excel(base_path + 'data/NurseData.xlsx', sheet_name="personindstillinger")
+nurse_df = nurse_df_base.groupby(['nurseHours', 'nurseLevel']).agg(nurseCount=('Person', 'count')).reset_index()\
+    .rename_axis('nurseType').reset_index()
+
 
 roster_matching_file = f'data/1WeekRosterMatching.json'
 with open(roster_matching_file, 'r') as fp:
