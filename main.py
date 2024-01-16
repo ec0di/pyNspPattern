@@ -14,6 +14,7 @@ use_start_conditions_from_first_two_weeks = False
 use_initial_solution = False
 base_path = ''
 start_condition_filename = f'{base_path}data/{n_weeks}WeekRosterSolutionOptimal'
+roster_matching_file = f'{base_path}data/1WeekRosterMatchingUnique.json'
 
 max_time_sec = 30
 max_iter = 1000
@@ -22,7 +23,7 @@ set_dataframe_print_width()
 
 n_work_shifts = 3
 n_days = n_weeks * 7
-parquet_filename = f'{base_path}data/{n_weeks}WeekUniqueRosters.parquet'
+parquet_filename_by_n_weeks = lambda n_weeks: f'{base_path}data/{n_weeks}WeekUniqueRosters.parquet'
 nurse_df_multiplier = 4
 
 # demand per week
@@ -60,31 +61,33 @@ cost_parameters, feasibility_parameters = calculate_parameters(n_weeks, n_work_s
 roster_factory = RosterFactory(n_weeks, n_work_shifts, nurse_df, cost_parameters, feasibility_parameters)
 
 if read_roster_df:
-    roster_df = roster_factory.read_roster_df_from_parquet(parquet_filename)
+    roster_df = roster_factory.read_roster_df_from_parquet(parquet_filename_by_n_weeks(n_weeks))
+    if n_weeks == 2:
+        # deserialize roster matching
+        with open(roster_matching_file, 'r') as fp:
+            roster_matching = json.load(fp)
+            roster_factory.roster_matching = {int(key): value for key, value in roster_matching.items()}
 else:
     roster_df = roster_factory.calculate_roster_df()
     roster_df.columns = [str(colname) for colname in roster_df.columns]
 
     # create 2 week roster df with 1week rosters matching
     if n_weeks == 2:
-        roster1_df = roster_factory.read_roster_df_from_parquet(parquet_filename=f'{base_path}data/1WeekRosters.parquet')
+        roster1_df = roster_factory.read_roster_df_from_parquet(parquet_filename=parquet_filename_by_n_weeks(1))
+        roster_df = roster_factory.read_roster_df_from_parquet(parquet_filename=parquet_filename_by_n_weeks(2))
         roster_df = roster_factory.append_one_week_roster_index_to_two_week_roster_df(roster1_df)
-    roster_df.to_parquet(parquet_filename, index=False)
+    roster_df.to_parquet(parquet_filename_by_n_weeks(n_weeks), index=False)
+
+    if n_weeks == 1:
+        roster_factory.calculate_roster_matching()
+        # serialize roster matching
+        with open(roster_matching_file, 'w') as fp:
+            json.dump(roster_factory.roster_matching, fp)
 # create map of day, work_shifts to rosters
 roster_factory.append_day_work_shift_flags()
 
-roster_matching_file = f'data/1WeekRosterMatchingUnique.json'
-if n_weeks == 1:
-    roster_factory.calculate_roster_matching()
-    # serialize roster matching
-    with open(roster_matching_file, 'w') as fp:
-        json.dump(roster_factory.roster_matching, fp)
+
 if use_start_conditions_from_first_two_weeks:
-    if n_weeks == 2:
-        # deserialize roster matching
-        with open(roster_matching_file, 'r') as fp:
-            roster_matching = json.load(fp)
-            roster_factory.roster_matching = {int(key): value for key, value in roster_matching.items()}
 
     # create nurse_df from solution file
     roster_solution_df = pd.read_parquet(f'{start_condition_filename}StartCondition.parquet')
