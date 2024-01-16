@@ -1,9 +1,10 @@
 import numpy as np
-from functools import wraps
-from time import time
+import pandas as pd
 
 OFF_SHIFT = 3
 MAX_CONSECUTIVE_WORK_SHIFTS = 5
+DELTA_NURSE_SHIFT = 1
+SHIFT_LENGTH_IN_HOURS = 8
 
 COSTS = {
     'consecutiveShifts': -0.04,
@@ -15,18 +16,6 @@ COSTS = {
     'nightShiftsFair': None,
     'nightAndAfternoonShiftsFair': None,
     'weekendShiftsFair': None}
-
-
-def timing(f):
-    @wraps(f)
-    def wrap(*args, **kw):
-        ts = time()
-        result = f(*args, **kw)
-        te = time()
-        print('func:%r args:[%r, %r] took: %2.4f sec' % \
-          (f.__name__, args, kw, te-ts))
-        return result
-    return wrap
 
 
 def is_weekend(j, k):
@@ -50,44 +39,6 @@ def bin_array_to_list(b, n_days, n_work_shifts):
         else:
             roster.append(6)
     return roster
-
-
-def calculate_cost(rosters):
-    costs = 0
-    for k, roster_list in rosters.items():
-        for r in roster_list:
-            cost = r[1]
-            costs += cost
-    return costs
-
-
-def calculate_demand_cover(rosters, n_days, n_work_shifts, nurseType_and_roster_number=None):
-    arr = np.zeros((n_days, n_work_shifts))
-    if nurseType_and_roster_number is not None:
-        for (nurseType, roster_num) in nurseType_and_roster_number:
-            arr += rosters[nurseType][roster_num][0]
-    else:
-        for nurseType, roster_list in rosters.items():
-            for r in roster_list:
-                arr += r[0]
-    return arr
-
-
-def calculate_off_cover(rosters, n_days, n_work_shifts):
-    arr = np.zeros(n_days)
-    for k, roster_list in rosters.items():
-        for r in roster_list:
-            for day in range(n_days):
-                if sum(r[0][day, :]) == 0:
-                    arr[day] += 1
-    return arr
-
-
-def get_shifts_not_covered(rosters, n_days, n_work_shifts, nurseType_and_roster_number_not_covered):
-    x, y = np.where(calculate_demand_cover(rosters, n_days, n_work_shifts,
-                                           nurseType_and_roster_number=nurseType_and_roster_number_not_covered))
-    hard_shifts_to_cover = [(x_, y_) for x_, y_ in zip(x, y)]
-    return hard_shifts_to_cover
 
 
 class RecursiveRosterParameters:
@@ -146,12 +97,12 @@ def get_best_nurseTypes_sorted_low_to_high(beta, beta_dict=None):
     return nurseType_list
 
 
-def calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand, hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor):
+def calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand, hard_shifts_fair_plans_factor,
+                         weekend_shifts_fair_plan_factor, shift_length_in_hours):
     weekend_shifts_per_week = sum(
         [base_demand[k, j] for j in range(7) for k in range(n_work_shifts) if is_weekend(j, k)])
     night_shifts_per_week = sum(base_demand[2, :])
 
-    shift_length_in_hours = 8
     avg_weekend_shifts_per_person_per_period = 1.0 * weekend_shifts_per_week / sum(nurse_df['nurseCount']) * n_weeks
     avg_shifts_per_period = {nurse_hours: nurse_hours / shift_length_in_hours * n_weeks
                              for nurse_hours in nurse_df.nurseHours.unique()}
@@ -172,3 +123,9 @@ def list_to_binary_array(plan, n_days, n_work_shifts):
         if e != OFF_SHIFT:
             x[j, e] = 1
     return x
+
+
+def set_dataframe_print_width(desired_width = 320):
+    pd.set_option('display.width', desired_width)
+    np.set_printoptions(linewidth=desired_width)
+    pd.set_option('display.max_columns', None)

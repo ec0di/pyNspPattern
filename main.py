@@ -3,13 +3,14 @@ import pandas as pd
 import json
 
 from master_problem import master_problem_instance
-from helpers import get_demand, calculate_parameters
+from helpers import get_demand, calculate_parameters, set_dataframe_print_width, \
+    DELTA_NURSE_SHIFT, SHIFT_LENGTH_IN_HOURS
 from roster_factory import RosterFactory
 
 
 n_weeks = 1  # works for 1 week with nurse_type from bla
-read_roster_df = True
-use_start_conditions_from_first_two_weeks = True
+read_roster_df = False
+use_start_conditions_from_first_two_weeks = False
 use_initial_solution = False
 base_path = ''
 start_condition_filename = f'{base_path}data/{n_weeks}WeekRosterSolutionOptimal'
@@ -17,10 +18,11 @@ start_condition_filename = f'{base_path}data/{n_weeks}WeekRosterSolutionOptimal'
 max_time_sec = 30
 max_iter = 1000
 n_rosters_per_iteration = 300
+set_dataframe_print_width()
 
 n_work_shifts = 3
 n_days = n_weeks * 7
-parquet_filename = f'{base_path}data/{n_weeks}WeekRosters.parquet'
+parquet_filename = f'{base_path}data/{n_weeks}WeekUniqueRosters.parquet'
 nurse_df_multiplier = 4
 
 # demand per week
@@ -35,8 +37,12 @@ demand = get_demand(base_demand, n_weeks)
 nurse_df = pd.DataFrame({'nurseHours': [28, 28, 32, 32, 37, 37],
                          'nurseLevel': [1, 3, 1, 3, 1, 3],
                          'nurseCount': [1, 1, 1, 4, 4, 3]})
+nurse_df['nurseIndex'] = np.arange(len(nurse_df))
 nurse_df['lastOneWeekRosterIndex'] = -1  # means all rosters are available
 nurse_df['lastTwoWeekRosterIndex'] = -1  # means all rosters are available
+nurse_df = nurse_df.assign(nurseShifts=lambda x: x.nurseHours // 8 * n_weeks,
+                           nurseShiftsMin=lambda x: x.nurseShifts - DELTA_NURSE_SHIFT,
+                           nurseShiftsMax=lambda x: x.nurseShifts + DELTA_NURSE_SHIFT)
 nurse_df.nurseCount *= nurse_df_multiplier
 
 # quick check of demand vs supply
@@ -48,7 +54,8 @@ weekend_shifts_fair_plan_factor = 0.5
 
 cost_parameters, feasibility_parameters = calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand,
                                                                hard_shifts_fair_plans_factor,
-                                                               weekend_shifts_fair_plan_factor)
+                                                               weekend_shifts_fair_plan_factor,
+                                                               SHIFT_LENGTH_IN_HOURS)
 
 roster_factory = RosterFactory(n_weeks, n_work_shifts, nurse_df, cost_parameters, feasibility_parameters)
 
@@ -66,14 +73,14 @@ else:
 # create map of day, work_shifts to rosters
 roster_factory.append_day_work_shift_flags()
 
+roster_matching_file = f'data/1WeekRosterMatchingUnique.json'
+if n_weeks == 1:
+    roster_factory.calculate_roster_matching()
+    # serialize roster matching
+    with open(roster_matching_file, 'w') as fp:
+        json.dump(roster_factory.roster_matching, fp)
 if use_start_conditions_from_first_two_weeks:
-    roster_matching_file = f'data/1WeekRosterMatching.json'
-    if n_weeks == 1:
-        roster_factory.calculate_roster_matching()
-        # serialize roster matching
-        with open(roster_matching_file, 'w') as fp:
-            json.dump(roster_factory.roster_matching, fp)
-    elif n_weeks == 2:
+    if n_weeks == 2:
         # deserialize roster matching
         with open(roster_matching_file, 'r') as fp:
             roster_matching = json.load(fp)
