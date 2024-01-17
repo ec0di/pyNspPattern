@@ -1,5 +1,7 @@
 import numpy as np
+import pandas
 import pandas as pd
+import os
 
 OFF_SHIFT = 3
 MAX_CONSECUTIVE_WORK_SHIFTS = 5
@@ -129,3 +131,33 @@ def set_dataframe_print_width(desired_width = 320):
     pd.set_option('display.width', desired_width)
     np.set_printoptions(linewidth=desired_width)
     pd.set_option('display.max_columns', None)
+
+
+def downcast_dataframe(df):
+    """downcast to save memory"""
+    return (
+        df
+        .apply(pd.to_numeric, downcast="float")
+        .apply(pd.to_numeric, downcast="integer")
+        .apply(pd.to_numeric, downcast="unsigned")
+    )
+
+
+def write_to_parquet(df, filename):
+    full_filename = filename + '.parquet'
+    print(f'Writing file: {full_filename}')
+    df.to_parquet(full_filename, index=False)
+
+
+def hotfix_for_pandas_merge(r_indices_df, roster_df):
+    """Since downcasting changes the type of the columns, we need to change it back to standard dtypes
+    for pandas merge to work on Windows"""
+    r_indices_df.to_parquet('data/r_indices_df' + '.parquet', index=False)
+    roster_df.to_parquet('data/roster_df' + '.parquet', index=False)
+
+    r_indices_df = pd.read_parquet('data/r_indices_df' + '.parquet')
+    roster_df = pd.read_parquet('data/roster_df' + '.parquet')
+    # delete files
+    os.remove('data/r_indices_df' + '.parquet')
+    os.remove('data/roster_df' + '.parquet')
+    return r_indices_df, roster_df

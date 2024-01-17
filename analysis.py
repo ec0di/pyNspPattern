@@ -8,6 +8,7 @@ np.set_printoptions(linewidth=desired_width)
 pd.set_option('display.max_columns', None)
 
 
+#base_path = 'data/2WeekRosterSolutionOptimal'
 base_path = 'data/2WeekRosterSolutionOptimal'
 
 roster_solution1_df = pd.read_parquet(f'{base_path}StartCondition.parquet').\

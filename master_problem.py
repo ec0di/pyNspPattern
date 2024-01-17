@@ -4,7 +4,7 @@ from contexttimer import timer
 
 
 def master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices, roster_costs, binary_plans, demand,
-                            max_time_solver_sec, solver_id='GLOP'):  # GLOP is LP, CBC is MIP
+                            max_time_solver_sec, solver_id='GLOP', verbose=True):  # GLOP is LP, CBC is MIP
     solver = pywraplp.Solver.CreateSolver(solver_id=solver_id)
 
     start_time = time.time()
@@ -24,21 +24,22 @@ def master_problem_instance(n_days, n_work_shifts, nurse_df, roster_indices, ros
 
     setup_time = time.time()
 
-    print(f'Time to setup problem: {round(setup_time - start_time, 2)} s')
+    if verbose:
+        print(f'Time to setup problem: {round(setup_time - start_time, 2)} s')
 
     if solver_id in ['CBC', 'SCIP']:
         solver.SetTimeLimit(int(1000 * max_time_solver_sec))
     solver.Minimize(obj)
     status = solver.Solve()
 
-    print(f'Time to solve: {round(time.time() - setup_time, 2)} s')
+    if verbose:
+        print(f'Time to solve: {round(time.time() - setup_time, 2)} s')
+        if solver_id == 'CBC':
+            print(f"Integer Solution with Object {round(solver.Objective().Value(), 1)}")
+        elif solver_id == 'GLOP':
+            print(f"LP Solution with Object {round(solver.Objective().Value(), 1)}")
 
-    if solver_id == 'CBC':
-        print(f"Integer Solution with Object {round(solver.Objective().Value(), 1)}")
-    elif solver_id == 'GLOP':
-        print(f"LP Solution with Object {round(solver.Objective().Value(), 1)}")
-
-    return solver, nurse_c, demand_c, demand_advanced_nurse_level_c, z, status
+    return solver, status, demand_c, z
 
 
 #@timer()

@@ -1,12 +1,13 @@
 import copy
+import json
 import random
 import numpy as np
 import pandas as pd
 from contexttimer import timer
 from time import time
 
-from helpers import list_to_binary_array, MAX_CONSECUTIVE_WORK_SHIFTS, OFF_SHIFT, DELTA_NURSE_SHIFT, \
-    SHIFT_LENGTH_IN_HOURS
+from helpers import list_to_binary_array, MAX_CONSECUTIVE_WORK_SHIFTS, DELTA_NURSE_SHIFT, \
+    downcast_dataframe
 from partial_roster import PartialRoster
 from master_problem import master_problem_instance
 
@@ -29,7 +30,11 @@ class RosterFactory:
         self.roster_matching = dict()
 
     @timer()
-    def calculate_roster_df(self):
+    def calculate_unique_roster_df(self):
+        """ NOTE: Not used yet
+
+        calculates the unique rosters for the maximum nurse hours, to get a full list of all rosters. individual costs
+        are calculated correctly, but fair costs are not, so this will have to be corrected when you know the actual nurse hours"""
         base_roster = PartialRoster(n_days=self.n_days,
                                     nurse_hours=self.nurse_df.nurseHours.max(),
                                     n_work_shifts=self.n_work_shifts,
@@ -69,14 +74,14 @@ class RosterFactory:
         roster_df['rosterIndex'] = np.arange(roster_df.shape[0])
         roster_df = roster_df.reset_index(drop=True)
 
+        roster_df = downcast_dataframe(roster_df)
         self.roster_df = roster_df
-        self.downcast_roster_df()
 
-        return self.roster_df
+        return roster_df
 
     @timer()
-    def calculate_roster_df_old(self):
-        DELTA_NURSE_SHIFTS = 4 if self.n_weeks == 1 else 1  # for 1-week rosters it is okay to create lots of rosters
+    def calculate_roster_df(self):
+        delta_nurse_shift = 4 if self.n_weeks == 1 else DELTA_NURSE_SHIFT  # for 1-week rosters it is okay to create lots of rosters
 
         nurse_hours_list = self.nurse_df.nurseHours.unique()
         min_nurse_hours = nurse_hours_list.min()
@@ -105,15 +110,15 @@ class RosterFactory:
                 off_shifts_needed_later = ((self.n_days - new_roster.day) // 7) * 2  # 2 off shifts per week
                 off_shifts_total = new_roster.day - new_roster.work_shifts_total + off_shifts_needed_later
                 minimum_allowed_off_shifts = self.n_days - (
-                            self.feasibility_parameters.avg_shifts_per_period[min_nurse_hours] - DELTA_NURSE_SHIFTS)
+                            self.feasibility_parameters.avg_shifts_per_period[min_nurse_hours] - delta_nurse_shift)
                 if off_shifts_total > minimum_allowed_off_shifts:
                     continue
 
                 if new_roster.is_finished():
-                    if new_roster.work_shifts_total >= n_shifts_for_min_nurse_hours - DELTA_NURSE_SHIFTS:
+                    if new_roster.work_shifts_total >= n_shifts_for_min_nurse_hours - delta_nurse_shift:
                         for nurse_hours in nurse_hours_list:
                             if new_roster.work_shifts_total >= self.feasibility_parameters.avg_shifts_per_period[
-                                nurse_hours] - DELTA_NURSE_SHIFTS:
+                                nurse_hours] - delta_nurse_shift:
                                 new_roster_nurse_hours = copy.deepcopy(new_roster)
                                 new_roster_nurse_hours.nurse_hours = nurse_hours
 
@@ -139,39 +144,17 @@ class RosterFactory:
         roster_df['rosterIndex'] = np.arange(roster_df.shape[0])
         roster_df = roster_df.reset_index(drop=True)
 
+        roster_df = downcast_dataframe(roster_df)
         self.roster_df = roster_df
-        self.downcast_roster_df()
 
-        return self.roster_df
-
-    def downcast_roster_df(self):
-        """downcast to save memory"""
-        self.roster_df = (
-            self.roster_df
-            .apply(pd.to_numeric, downcast="float")
-            .apply(pd.to_numeric, downcast="integer")
-            .apply(pd.to_numeric, downcast="unsigned")
-        )
+        return roster_df
 
     @timer()
     def calculate_roster_matching(self):
-        avg_shifts_per_two_weeks = {nurse_hours: nurse_hours / SHIFT_LENGTH_IN_HOURS * 2
-            for nurse_hours in self.nurse_df.nurseHours.unique()}
-
-        roster_matching = \
-            {nurse_hours:
-                 {rosterIndex:
-                      {'rostersAllowedAfter': [], 'rostersAllowedBefore': []}
-                  for rosterIndex in
-                  self.roster_df.loc[lambda x: (min_nurse_shifts <= x.workShifts) & (x.workShifts <= max_nurse_shifts)].rosterIndex
-                  }
-             for nurse_hours, min_nurse_shifts, max_nurse_shifts in
-             self.nurse_df[['nurseHours', 'nurseShiftsMin', 'nurseShiftsMax']].itertuples(index=False)
-             }
-        # todo, add roster_matching index=-1 where we go through all rosters
-        for nurse_hours, min_nurse_shifts, max_nurse_shifts in \
-                self.nurse_df[['nurseHours', 'nurseShiftsMin', 'nurseShiftsMax']].itertuples(index=False):
-            roster_df_ = self.roster_df.loc[lambda x: (min_nurse_shifts <= x.workShifts) & (x.workShifts <= max_nurse_shifts)]
+        roster_matching = {rosterIndex: {'rostersAllowedAfter': [], 'rostersAllowedBefore': []}
+                           for rosterIndex in self.roster_df.rosterIndex}
+        for nurse_hours in self.nurse_df.nurseHours.unique():
+            roster_df_ = self.roster_df[self.roster_df.nurseHours == nurse_hours]
             for roster_1 in roster_df_.itertuples(index=False):
                 for roster_2 in roster_df_.itertuples(index=False):
                     # last_shift_constraints:
@@ -181,26 +164,29 @@ class RosterFactory:
                             (last_shift_roster_1 == 2 and first_shift_roster_2 in [0, 1]):
                         continue
                     # worked_too_much_per_period_constraints:
-                    if roster_1.workShifts + roster_2.workShifts > avg_shifts_per_two_weeks[nurse_hours] + DELTA_NURSE_SHIFT:
+                    if roster_1.workShifts + roster_2.workShifts > self.feasibility_parameters.avg_shifts_per_period[
+                        nurse_hours] * 2 + 1:
                         continue
                     # worked_too_many_day_consecutive_constraints:
                     try:
-                        work_days_consecutive_start_2 = \
-                        np.where(np.array(roster_2[0:MAX_CONSECUTIVE_WORK_SHIFTS]) == OFF_SHIFT)[0][0]
+                        work_days_consecutive_start_2 = np.where(roster_2[0:MAX_CONSECUTIVE_WORK_SHIFTS])[0][0]
                     except:
                         work_days_consecutive_start_2 = MAX_CONSECUTIVE_WORK_SHIFTS
                     if roster_1.workDaysConsecutive + work_days_consecutive_start_2 > MAX_CONSECUTIVE_WORK_SHIFTS:
                         continue
-                    roster_matching[nurse_hours][roster_1.rosterIndex]['rostersAllowedAfter'].append(roster_2.rosterIndex)
-                    roster_matching[nurse_hours][roster_2.rosterIndex]['rostersAllowedBefore'].append(roster_1.rosterIndex)
+                    roster_matching[roster_1.rosterIndex]['rostersAllowedAfter'].append(roster_2.rosterIndex)
+                    roster_matching[roster_2.rosterIndex]['rostersAllowedBefore'].append(roster_1.rosterIndex)
         self.roster_matching = roster_matching
 
-    def read_roster_df_from_parquet(self, parquet_filename):
-        self.roster_df = pd.read_parquet(parquet_filename)
-        self.downcast_roster_df()
-        return self.roster_df
+    def read_roster_df_from_parquet(self, parquet_filename, is_returned_only=False):
+        print(f'Loading file: {parquet_filename}')
+        df = pd.read_parquet(parquet_filename)
+        df = downcast_dataframe(df)
+        if not is_returned_only:
+            self.roster_df = df
+        return df
 
-    def initial_solution_for_cg(self, n_largest_for_each_nurse, n_smallest_for_each_nurse):
+    def run_initial_solution_for_cg(self, n_largest_for_each_nurse, n_smallest_for_each_nurse):
         """This initial solution contains expensive 0s ,1s and 2s plans for all nurse types along with a set of the
         cheapest plans for all nurse types"""
         roster_largest_cost_df = self.roster_df.merge(
@@ -239,16 +225,16 @@ class RosterFactory:
         self.binary_plans = self.calculate_binary_plans()
         self.roster_costs = self.roster_df.set_index('rosterIndex')['totalCost'].to_dict()
         print('binary_plans and roster_cost is added to class')
-        return self.roster_indices, self.binary_plans, self.roster_costs
+        #return self.roster_indices, self.binary_plans, self.roster_costs
 
-    def full_solution_for_mip(self):
+    def run_full_solution_for_mip(self):
         self.roster_indices = {(nurse_hours, last_one_week_roster_index): set(
             self.roster_df[self.roster_df.nurseHours == nurse_hours].rosterIndex.values)
                                for nurse_hours, last_one_week_roster_index in
                                self.nurse_df[['nurseHours', 'lastOneWeekRosterIndex']].itertuples(index=False)}
         self.binary_plans = self.calculate_binary_plans()
         self.roster_costs = self.roster_df.set_index('rosterIndex')['totalCost'].to_dict()
-        return self.roster_indices, self.binary_plans, self.roster_costs
+        #return self.roster_indices, self.binary_plans, self.roster_costs
 
     @timer()
     def calculate_binary_plans(self):
@@ -266,24 +252,24 @@ class RosterFactory:
             self.roster_df = self.roster_df.assign(**work_shift_dict)
         return self.roster_df
 
-    def append_one_week_roster_index_to_two_week_roster_df(self, roster1_df):
+    def append_one_week_roster_index_to_two_week_roster_df(self, parquet_filename_for_roster1_df):
+        roster1_df = self.read_roster_df_from_parquet(parquet_filename=parquet_filename_for_roster1_df,
+                                                      is_returned_only=True)
         roster2_df = self.roster_df
         first_week_cols = [str(x) for x in np.arange(7)]
         second_week_cols = [str(x) for x in np.arange(7, 14)]
-        roster2_with_roster1_index_df = roster2_df.merge(
-            roster1_df.rename(columns={'rosterIndex': 'rosterIndexWeek1'})[first_week_cols + ['rosterIndexWeek1']],
-            how='inner', on=first_week_cols) \
-            .merge(roster1_df.rename(
-            columns={'rosterIndex': 'rosterIndexWeek2', **{col: str(int(col) + 7) for col in first_week_cols}})
-                   [second_week_cols + ['rosterIndexWeek2']],
-                   how='inner', on=second_week_cols)
+        roster2_with_roster1_index_df = roster2_df.merge(roster1_df.rename(columns={'rosterIndex': 'rosterIndexWeek1'})[first_week_cols+['nurseHours', 'rosterIndexWeek1']],
+                         how='inner', on=['nurseHours']+first_week_cols)\
+                  .merge(roster1_df.rename(columns={'rosterIndex': 'rosterIndexWeek2', **{col: str(int(col)+7) for col in first_week_cols}})
+                              [second_week_cols+['nurseHours', 'rosterIndexWeek2']],
+                         how='inner', on=['nurseHours']+second_week_cols)
         print('roster 2 week shape before and after: ', roster2_df.shape, roster2_with_roster1_index_df.shape)
         self.roster_df = roster2_with_roster1_index_df
         return roster2_with_roster1_index_df
 
     @timer()
     def run_column_generation(self, demand, solver_id='GLOP', max_time_sec=30, max_iter=10, min_object_value=20,
-                              max_time_per_iteration_sec=10, n_rosters_per_iteration=10, verbose=False):
+                              max_time_per_iteration_sec=10, n_rosters_per_iteration=10, verbose=True):
         """This function runs column generation for a given demand. It starts with a full set of rosters and iteratively
         adds more. Currently, it adds a number of random rosters for each nurse type based on the dual values of the demand
         constraints."""
@@ -295,7 +281,7 @@ class RosterFactory:
         object_value = 99999
         iter = 1
         while iter <= max_iter and time() - start_time < max_time_sec and min_object_value * self.n_weeks <= object_value:
-            solver, nurse_c, demand_c, demand_comp_level_c, z, status = master_problem_instance(n_days=self.n_days,
+            solver, status, demand_c, z = master_problem_instance(n_days=self.n_days,
                                                                                                 n_work_shifts=self.n_work_shifts,
                                                                                                 nurse_df=self.nurse_df,
                                                                                                 roster_indices=self.roster_indices,
@@ -303,7 +289,8 @@ class RosterFactory:
                                                                                                 binary_plans=self.binary_plans,
                                                                                                 demand=demand,
                                                                                                 max_time_solver_sec=max_time_per_iteration_sec,
-                                                                                                solver_id=solver_id)
+                                                                                                solver_id=solver_id,
+                                                                  verbose=verbose)
 
             # np.array([const.dual_value() for const in nurse_c.values()])
             # np.array([const.dual_value() for const in demand_comp_level_c.values()]).reshape((n_days, n_work_shifts))
@@ -342,3 +329,16 @@ class RosterFactory:
                 print(f'Iteration {iter}')
                 print('------------')
             iter += 1
+
+    def load_roster_matching(self, roster_matching_file):
+        """deserialize roster matching"""
+        print(f'Loading file: {roster_matching_file}')
+        with open(roster_matching_file, 'r') as fp:
+            roster_matching = json.load(fp)
+            self.roster_matching = {int(key): value for key, value in roster_matching.items()}
+
+    def export_roster_matching(self, roster_matching_file):
+        # serialize roster matching
+        print(f'Exporting file {roster_matching_file}')
+        with open(roster_matching_file, 'w') as fp:
+            json.dump(self.roster_matching, fp)

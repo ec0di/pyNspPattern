@@ -183,47 +183,6 @@ class PartialRoster(object):
                                         cp.avg_weekend_shifts_per_person_per_period) - self.weekend_shifts_fair_cost
         return ce
 
-    def cost_next_shift(self, feasible_shifts):
-        cp = self.cost_parameters
-        ce = self.calc_fair_costs(current_or_next='next')
-
-        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_hours]
-
-        costs = []
-        for k in feasible_shifts:
-            cost = {'fair_cost': 0, 'individual_cost': 0}
-            if self.last_shift == k and k != OFF_SHIFT:
-                cost['individual_cost'] += ce['consecutiveShifts']
-                cp.count_cost_cases['consecutiveShifts'] += 1
-            if self.shift_before_last_shift == 2 and self.last_shift != OFF_SHIFT and k != OFF_SHIFT:
-                cost['individual_cost'] += ce['missingTwoDaysOffAfterNightShifts']
-                cp.count_cost_cases['missingTwoDaysOffAfterNightShifts'] += 1
-            if k == 2 and self.night_shift_consecutive >= 2:
-                cost['individual_cost'] += ce['moreThanTwoConsecutiveNightShifts']
-                cp.count_cost_cases['moreThanTwoConsecutiveNightShifts'] += 1
-            if self.night_shift_consecutive == 1 and k != 2:
-                cost['individual_cost'] += ce['singleNightShift']
-                cp.count_cost_cases['singleNightShift'] += 1
-            if self.work_days_consecutive >= 4 and k != OFF_SHIFT:
-                cost['individual_cost'] += ce['moreThanFourConsecutiveWorkShifts']
-                cp.count_cost_cases['moreThanFourConsecutiveWorkShifts'] += 1
-
-            # penalty related to fair plans
-            if k == 1 and self.afternoon_shift_total + 1 > hard_shift_fair:
-                cost['fair_cost'] += ce['afternoonShiftsFair']
-                cp.count_cost_cases['afternoonShiftsFair'] += 1
-            if k == 2 and self.night_shift_total + 1 > hard_shift_fair:
-                cost['fair_cost'] += ce['nightShiftsFair']
-                cp.count_cost_cases['nightShiftsFair'] += 1
-            if (k in [1, 2]) and self.night_shift_total + self.afternoon_shift_total + 1 > 2 * hard_shift_fair:
-                cost['fair_cost'] += ce['nightAndAfternoonShiftsFair']
-                cp.count_cost_cases['nightAndAfternoonShiftsFair'] += 1
-            if is_weekend(self.day, k) and self.weekend_shift_total + 1 > cp.avg_weekend_shifts_per_person_per_period:
-                cost['fair_cost'] += ce['weekendShiftsFair']
-                cp.count_cost_cases['weekendShiftsFair'] += 1
-            costs.append(cost)
-        return costs
-
     def calculate_fair_costs(self):
 
         cp = self.cost_parameters
