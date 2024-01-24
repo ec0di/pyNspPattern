@@ -7,6 +7,14 @@ OFF_SHIFT = 3
 MAX_CONSECUTIVE_WORK_SHIFTS = 5
 DELTA_NURSE_SHIFT = 1
 SHIFT_LENGTH_IN_HOURS = 8
+N_WORK_SHIFTS = 3
+
+
+BASE_DEMAND = np.array([[3, 4, 3, 4, 3, 2, 2],
+                        [2, 2, 2, 2, 2, 2, 2],
+                        [2, 2, 2, 2, 2, 2, 2]])
+NURSE_DF_MULTIPLIER = 4
+BASE_DEMAND *= NURSE_DF_MULTIPLIER
 
 COSTS = {
     'consecutiveShifts': -0.04,

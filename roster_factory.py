@@ -7,7 +7,7 @@ from contexttimer import timer
 from time import time
 
 from helpers import list_to_binary_array, MAX_CONSECUTIVE_WORK_SHIFTS, DELTA_NURSE_SHIFT, \
-    downcast_dataframe
+    downcast_dataframe, SHIFT_LENGTH_IN_HOURS, OFF_SHIFT
 from partial_roster import PartialRoster
 from master_problem import master_problem_instance
 
@@ -151,6 +151,9 @@ class RosterFactory:
 
     @timer()
     def calculate_roster_matching(self):
+        avg_shifts_per_two_weeks = {nurse_hours: nurse_hours / SHIFT_LENGTH_IN_HOURS * 2
+                                    for nurse_hours in self.nurse_df.nurseHours.unique()}
+
         roster_matching = {rosterIndex: {'rostersAllowedAfter': [], 'rostersAllowedBefore': []}
                            for rosterIndex in self.roster_df.rosterIndex}
         for nurse_hours in self.nurse_df.nurseHours.unique():
@@ -164,12 +167,11 @@ class RosterFactory:
                             (last_shift_roster_1 == 2 and first_shift_roster_2 in [0, 1]):
                         continue
                     # worked_too_much_per_period_constraints:
-                    if roster_1.workShifts + roster_2.workShifts > self.feasibility_parameters.avg_shifts_per_period[
-                        nurse_hours] * 2 + 1:
+                    if roster_1.workShifts + roster_2.workShifts > avg_shifts_per_two_weeks[nurse_hours] + DELTA_NURSE_SHIFT:
                         continue
                     # worked_too_many_day_consecutive_constraints:
                     try:
-                        work_days_consecutive_start_2 = np.where(roster_2[0:MAX_CONSECUTIVE_WORK_SHIFTS])[0][0]
+                        work_days_consecutive_start_2 = np.where(np.array(roster_2[0:MAX_CONSECUTIVE_WORK_SHIFTS])==OFF_SHIFT)[0][0]
                     except:
                         work_days_consecutive_start_2 = MAX_CONSECUTIVE_WORK_SHIFTS
                     if roster_1.workDaysConsecutive + work_days_consecutive_start_2 > MAX_CONSECUTIVE_WORK_SHIFTS:
@@ -228,10 +230,12 @@ class RosterFactory:
         #return self.roster_indices, self.binary_plans, self.roster_costs
 
     def run_full_solution_for_mip(self):
-        self.roster_indices = {(nurse_hours, last_one_week_roster_index): set(
-            self.roster_df[self.roster_df.nurseHours == nurse_hours].rosterIndex.values)
-                               for nurse_hours, last_one_week_roster_index in
-                               self.nurse_df[['nurseHours', 'lastOneWeekRosterIndex']].itertuples(index=False)}
+        for nurse_hours, last_one_week_roster_index in self.nurse_df[['nurseHours', 'lastOneWeekRosterIndex']].itertuples(index=False):
+            df = self.roster_df[self.roster_df.nurseHours == nurse_hours]
+            if self.roster_matching and last_one_week_roster_index != -1:
+                df = df[df.rosterIndexWeek1.isin(
+                    self.roster_matching[last_one_week_roster_index]['rostersAllowedAfter'])]
+            self.roster_indices[nurse_hours, last_one_week_roster_index] = set(df.rosterIndex.values)
         self.binary_plans = self.calculate_binary_plans()
         self.roster_costs = self.roster_df.set_index('rosterIndex')['totalCost'].to_dict()
         #return self.roster_indices, self.binary_plans, self.roster_costs
@@ -337,8 +341,21 @@ class RosterFactory:
             roster_matching = json.load(fp)
             self.roster_matching = {int(key): value for key, value in roster_matching.items()}
 
-    def export_roster_matching(self, roster_matching_file):
+    def write_roster_matching(self, roster_matching_file):
         # serialize roster matching
         print(f'Exporting file {roster_matching_file}')
         with open(roster_matching_file, 'w') as fp:
             json.dump(self.roster_matching, fp)
+
+    def filter_roster_df(self, pct_of_best_rosters_to_keep):
+        """This function filters the roster_df to keep only the best rosters for each nurse type"""
+        roster_df = self.roster_df
+        before = roster_df.shape[0]
+
+        def top_n_percent(group):
+            return group.nsmallest(int(len(group) * pct_of_best_rosters_to_keep), 'totalCost')
+
+        roster_df = roster_df.groupby('nurseHours', group_keys=False).apply(top_n_percent)
+        print(f'{roster_df.shape[0]} of {before} after filtering {pct_of_best_rosters_to_keep*100} pct best rosters for each nurse type')
+        self.roster_df = roster_df
+        return roster_df
