@@ -8,10 +8,10 @@ from helpers import get_demand, calculate_parameters, set_dataframe_print_width,
 
 from roster_factory import RosterFactory
 
-n_weeks = 2  # works for 1 week with nurse_type from bla
-read_roster_df = True
-use_initial_solution = True
-use_start_conditions_from_first_two_weeks = True
+n_weeks = 1  # works for 1 week with nurse_type from bla
+read_roster_df = False
+use_initial_solution = False
+use_start_conditions_from_first_two_weeks = False
 verbose = True
 
 roster_matching_file = f'data/1WeekRosterMatching.json'
