@@ -1,12 +1,13 @@
 import numpy as np
 import copy
 
-from helpers import is_weekend, COSTS as cost_elements, FeasibilityParameters, CostParameters, OFF_SHIFT
+from helpers import is_weekend, RosterFeasibilityParameters, RosterCostParameters
+from input_parameters import OFF_SHIFT, COSTS
 
 
 class PartialRoster(object):
     def __init__(self, n_days: int, nurse_hours: int, n_work_shifts: int,
-                 cost_parameters: CostParameters, feasibility_parameters: FeasibilityParameters):
+                 cost_parameters: RosterCostParameters, feasibility_parameters: RosterFeasibilityParameters):
         self.n_days = n_days
         self.nurse_hours = nurse_hours
         self.n_work_shifts = n_work_shifts
@@ -161,28 +162,6 @@ class PartialRoster(object):
     def is_finished(self):
         return self.day == self.n_days
 
-    def calc_fair_costs(self, current_or_next='current'):
-
-        start_value = 0 if current_or_next == 'current' else 1  # then its == 'next'
-        cp = self.cost_parameters
-        hard_shift_fair = cp.hard_shift_fair_per_period[self.nurse_hours]
-
-        ce = copy.deepcopy(cost_elements)
-        ce['afternoonShiftsFair'] = cp.hard_shifts_fair_plans_factor * \
-                                      max(start_value, start_value + self.afternoon_shift_total - hard_shift_fair) \
-                                      - self.afternoon_shifts_fair_cost
-        ce['nightShiftsFair'] = cp.hard_shifts_fair_plans_factor * max(start_value,
-                                                                         start_value + self.night_shift_total -
-                                                                         hard_shift_fair) - self.night_shifts_fair_cost
-        ce['nightAndAfternoonShiftsFair'] = cp.hard_shifts_fair_plans_factor * \
-                                                max(start_value, start_value + self.afternoon_shift_total
-                                                    + self.night_shift_total - 2 * hard_shift_fair) \
-                                                - self.night_and_afternoon_shifts_fair_cost
-        ce['weekendShiftsFair'] = cp.weekend_shifts_fair_plan_factor * \
-                                    max(start_value, start_value + self.weekend_shift_total -
-                                        cp.avg_weekend_shifts_per_person_per_period) - self.weekend_shifts_fair_cost
-        return ce
-
     def calculate_fair_costs(self):
 
         cp = self.cost_parameters
@@ -209,11 +188,11 @@ class PartialRoster(object):
         fair_costs = self.calculate_fair_costs()
 
         individual_costs = {
-            'consecutiveShifts': cost_elements['consecutiveShifts'] * self.n_consecutive_shifts,
-            'missingTwoDaysOffAfterNightShifts': cost_elements['missingTwoDaysOffAfterNightShifts'] * self.n_missing_two_days_off_after_night_shifts,
-            'moreThanTwoConsecutiveNightShifts': cost_elements['moreThanTwoConsecutiveNightShifts'] * self.n_more_than_two_concecutive_night_shifts,
-            'singleNightShift': cost_elements['singleNightShift'] * self.n_single_night_shifts,
-            'moreThanFourConsecutiveWorkShifts': cost_elements['moreThanFourConsecutiveWorkShifts'] * self.n_more_than_four_consecutive_work_shifts,
+            'consecutiveShifts': COSTS['consecutiveShifts'] * self.n_consecutive_shifts,
+            'missingTwoDaysOffAfterNightShifts': COSTS['missingTwoDaysOffAfterNightShifts'] * self.n_missing_two_days_off_after_night_shifts,
+            'moreThanTwoConsecutiveNightShifts': COSTS['moreThanTwoConsecutiveNightShifts'] * self.n_more_than_two_concecutive_night_shifts,
+            'singleNightShift': COSTS['singleNightShift'] * self.n_single_night_shifts,
+            'moreThanFourConsecutiveWorkShifts': COSTS['moreThanFourConsecutiveWorkShifts'] * self.n_more_than_four_consecutive_work_shifts,
         }
         return individual_costs, fair_costs
 

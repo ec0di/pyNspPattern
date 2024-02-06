@@ -1,31 +1,8 @@
 import numpy as np
-import pandas
 import pandas as pd
 import os
 
-OFF_SHIFT = 3
-MAX_CONSECUTIVE_WORK_SHIFTS = 5
-DELTA_NURSE_SHIFT = 1
-SHIFT_LENGTH_IN_HOURS = 8
-N_WORK_SHIFTS = 3
-
-
-BASE_DEMAND = np.array([[3, 4, 3, 4, 3, 2, 2],
-                        [2, 2, 2, 2, 2, 2, 2],
-                        [2, 2, 2, 2, 2, 2, 2]])
-NURSE_DF_MULTIPLIER = 4
-BASE_DEMAND *= NURSE_DF_MULTIPLIER
-
-COSTS = {
-    'consecutiveShifts': -0.04,
-    'missingTwoDaysOffAfterNightShifts': 0.1,
-    'moreThanTwoConsecutiveNightShifts': 1,
-    'singleNightShift': 1,
-    'moreThanFourConsecutiveWorkShifts': 1,
-    'afternoonShiftsFair': None,
-    'nightShiftsFair': None,
-    'nightAndAfternoonShiftsFair': None,
-    'weekendShiftsFair': None}
+from input_parameters import OFF_SHIFT, COSTS
 
 
 def is_weekend(j, k):
@@ -39,31 +16,15 @@ def is_weekend(j, k):
         return False
 
 
-def bin_array_to_list(b, n_days, n_work_shifts):
-    roster = []
-    for j in range(n_days):
-        if sum(b[j, :]):
-            for k in range(n_work_shifts):
-                if b[j, k] == 1:
-                    roster.append(k)
-        else:
-            roster.append(6)
-    return roster
+class ColumnGenerationParameters:
+    def __init__(self, max_time_sec, max_time_per_iteration_sec, max_iter, n_rosters_per_iteration):
+        self.max_time_sec = max_time_sec
+        self.max_time_per_iteration_sec = max_time_per_iteration_sec
+        self.max_iter = max_iter
+        self.n_rosters_per_iteration = n_rosters_per_iteration
+        
 
-
-class RecursiveRosterParameters:
-    def __init__(self, max_nodes_per_day, min_all_node_days, max_roster_cost, max_roster_number, max_nodes_searched,
-                 max_times_node_visited, shuffle_frequency):
-        self.max_nodes_per_day = max_nodes_per_day
-        self.min_all_node_days = min_all_node_days
-        self.max_roster_cost = max_roster_cost
-        self.max_roster_number = max_roster_number
-        self.max_nodes_searched = max_nodes_searched
-        self.max_times_node_visited = max_times_node_visited
-        self.shuffle_frequency = shuffle_frequency
-
-
-class CostParameters:
+class RosterCostParameters:
     def __init__(self, hard_shift_fair_per_period, avg_weekend_shifts_per_person_per_period,
                  hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor):
         self.hard_shift_fair_per_period = hard_shift_fair_per_period
@@ -73,38 +34,9 @@ class CostParameters:
         self.count_cost_cases = {cost: 0 for cost in COSTS.keys()}
 
 
-class FeasibilityParameters:
+class RosterFeasibilityParameters:
     def __init__(self, avg_shifts_per_period):
         self.avg_shifts_per_period = avg_shifts_per_period
-
-
-def get_solution_values(z, nurseTypes):
-    z_dict = {k: v.solution_value() for k, v in z.items() if v.solution_value() >= 1}
-    nurseType_and_roster_number_not_covered = []
-    for (i, r) in z_dict.keys():
-        if i == len(nurseTypes):
-            nurseType_and_roster_number_not_covered.append((i,r))
-    return z_dict, nurseType_and_roster_number_not_covered
-
-
-def get_day_shift_from_nurse_roster(rosters, nurseType, roster_num):
-    temp = np.where(rosters[nurseType][roster_num][0] >= 1)
-    day, shift = temp[0][0], temp[1][0]
-    return day, shift
-
-
-def get_demand(base_demand, n_weeks):
-    demand = base_demand * 1
-    demand = np.tile(demand, (1, n_weeks))  # D, 98 in total per week
-    return demand
-
-
-def get_best_nurseTypes_sorted_low_to_high(beta, beta_dict=None):
-    if beta_dict is None:
-        beta_dict = {nurseType_: v.dual_value() for nurseType_, v in beta.items()}
-    beta_dict_sorted = dict(sorted(beta_dict.items(), key=lambda item: item[1]))
-    nurseType_list = list(beta_dict_sorted.keys())
-    return nurseType_list
 
 
 def calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand, hard_shifts_fair_plans_factor,
@@ -120,10 +52,10 @@ def calculate_parameters(n_weeks, n_work_shifts, nurse_df, base_demand, hard_shi
     hard_shift_fair_per_period = {nurse_hours: avg_shifts_per_period / total_shifts_available_per_period * night_shifts_per_week * n_weeks
                                   for nurse_hours, avg_shifts_per_period in avg_shifts_per_period.items()}
 
-    cost_parameters = CostParameters(hard_shift_fair_per_period, avg_weekend_shifts_per_person_per_period,
-                                     hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor)
+    cost_parameters = RosterCostParameters(hard_shift_fair_per_period, avg_weekend_shifts_per_person_per_period,
+                                           hard_shifts_fair_plans_factor, weekend_shifts_fair_plan_factor)
 
-    feasibility_parameters = FeasibilityParameters(avg_shifts_per_period)
+    feasibility_parameters = RosterFeasibilityParameters(avg_shifts_per_period)
     return cost_parameters, feasibility_parameters
 
 
@@ -152,9 +84,8 @@ def downcast_dataframe(df):
 
 
 def write_to_parquet(df, filename):
-    full_filename = filename + '.parquet'
-    print(f'Writing file: {full_filename}')
-    df.to_parquet(full_filename, index=False)
+    print(f'Writing file: {filename}')
+    df.to_parquet(filename, index=False)
 
 
 def hotfix_for_pandas_merge(r_indices_df, roster_df):
