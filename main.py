@@ -138,7 +138,6 @@ class NurseScheduler:
                         groupby(['nurseHours', 'nurseLevel', 'lastOneWeekRosterIndex', 'twoWeekRosterIndexHistory']).\
                         agg(nurseCount=('nRostersInSolution', 'sum')).reset_index().astype({'nurseCount': 'int32'})
                     self.nurse_df = nurse_df
-                    print(nurse_df.nurseCount.sum())
                 nurse_df = self.nurse_df.assign(nurseShifts=lambda x: x.nurseHours // SHIFT_LENGTH_IN_HOURS * n_weeks_in_iteration)
 
                 roster_factory.nurse_df = nurse_df
@@ -161,11 +160,13 @@ class NurseScheduler:
 if __name__ == "__main__":
     n_weeks = 6
     assert n_weeks % 2 == 0, 'n_weeks must be an even number'
-    use_column_generation = True
+    use_column_generation = False  # setting this to False will find a (near) optimal schedule
     verbose = False
-    solution_base_path = f'data/{n_weeks}WeekRosterSolution'
+    solution_base_path = f'data/{n_weeks}WeekRosterSolutionOptimal'
 
     # parameters
+    """setting this parameter to 1.0, will use all data, and will make the solution time longer and the quality worse 
+    for Column Generation. However, full solution will be sure to be completely optimal"""
     pct_of_best_rosters_to_keep = 0.25
 
     # column generation parameters
@@ -183,7 +184,7 @@ if __name__ == "__main__":
                                      cg_parameters=column_generation_parameters,
                                      solution_base_path=solution_base_path,
                                      verbose=verbose)
-    nurse_scheduler.calculate_optimized_nurse_schedule(overwrite_setup_files=True)
+    nurse_scheduler.calculate_optimized_nurse_schedule(overwrite_setup_files=False)
 
     # visualize results
     fig1 = visualize_optimized_nurse_schedule(solution_base_file=solution_base_path, n_weeks=n_weeks, explode_nurse_count=False)
