@@ -194,8 +194,8 @@ if __name__ == "__main__":
     fig2 = visualize_optimized_nurse_demand_surplus(solution_base_file=solution_base_path, n_weeks=n_weeks)
 
     # to write out htmls
-    fig1.write_html(f'data/{n_weeks}WeekRosterOptimizedSchedule.html', full_html=True, include_plotlyjs='cdn')
-    fig2.write_html(f'data/{n_weeks}WeekRosterNurseDemandSurplus.html', full_html=True, include_plotlyjs='cdn')
+    fig1.write_html(f'data/{n_weeks}WeekRosterOptimizedSchedule.html', full_html=False, include_plotlyjs='cdn')
+    fig2.write_html(f'data/{n_weeks}WeekRosterNurseDemandSurplus.html', full_html=False, include_plotlyjs='cdn')
 
     # for exploring dataframes
     set_dataframe_print_width()
