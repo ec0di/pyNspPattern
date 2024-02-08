@@ -40,6 +40,8 @@ I generated some plotly plots as well, so you can visualize the results. Here ar
 
 <iframe src="https://gist.github.com/ec0di/ca8a0435a1667fd4fbeb9a93c9796d42" width="100%" height="500px"></iframe>
 
+<script src="https://gist.github.com/ec0di/ca8a0435a1667fd4fbeb9a93c9796d42.js"></script>
+
 ## To implement this in real scenarios
 First of all, there are some limitations to the mode. We are taking advantage of only having 4 shifts types, which is not always the case. If the space of possible rosters become to large, this model won't work.
 
