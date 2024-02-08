@@ -158,11 +158,14 @@ class NurseScheduler:
 
 
 if __name__ == "__main__":
-    n_weeks = 6
+    n_weeks = 4
     assert n_weeks % 2 == 0, 'n_weeks must be an even number'
-    use_column_generation = False  # setting this to False will find a (near) optimal schedule
+    use_column_generation = True  # setting this to False will find a (near) optimal schedule
     verbose = False
-    solution_base_path = f'data/{n_weeks}WeekRosterSolutionOptimal'
+    solution_base_path = f'data/{n_weeks}WeekRosterSolution'
+
+    if not use_column_generation:
+        solution_base_path += 'Optimal'
 
     # parameters
     """setting this parameter to 1.0, will use all data, and will make the solution time longer and the quality worse 
@@ -184,11 +187,27 @@ if __name__ == "__main__":
                                      cg_parameters=column_generation_parameters,
                                      solution_base_path=solution_base_path,
                                      verbose=verbose)
-    nurse_scheduler.calculate_optimized_nurse_schedule(overwrite_setup_files=False)
+    #nurse_scheduler.calculate_optimized_nurse_schedule(overwrite_setup_files=False)
 
     # visualize results
     fig1 = visualize_optimized_nurse_schedule(solution_base_file=solution_base_path, n_weeks=n_weeks, explode_nurse_count=False)
     fig2 = visualize_optimized_nurse_demand_surplus(solution_base_file=solution_base_path, n_weeks=n_weeks)
 
+    # to write out htmls
+    fig1.write_html(f'data/{n_weeks}WeekRosterOptimizedSchedule.html', full_html=True, include_plotlyjs='cdn')
+    fig2.write_html(f'data/{n_weeks}WeekRosterNurseDemandSurplus.html', full_html=True, include_plotlyjs='cdn')
+
     # for exploring dataframes
     set_dataframe_print_width()
+
+    import base64
+
+    # Read the Plotly HTML file
+    with open(f'data/{n_weeks}WeekRosterOptimizedSchedule.html', 'rb') as file:
+        html_content = file.read()
+
+    # Encode the HTML content to base64
+    base64_encoded = base64.b64encode(html_content).decode('utf-8')
+
+    # Print the base64 encoded string
+    print(base64_encoded)

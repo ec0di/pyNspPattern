@@ -26,8 +26,6 @@ def merge_solution_files(solution_base_file, n_weeks, explode_nurse_count=False)
         df = df.assign(twoWeekRosterIndexHistory=lambda x:
                     x[f'twoWeekRosterIndexHistory'] + ', ' + x.rosterIndex.astype(str), ).drop(columns='rosterIndex')
 
-    df[merge_columns + ['nurseCount1', 'nurseCount2']].sum()
-
     df = df.assign(nurseCount=lambda x: x[f'nurseCount{n_weeks//2-1}'],
                    rosterCostPerNurse=lambda x: x[[f'totalCost{i}' for i in range(n_weeks // 2)]].sum(axis=1) / x.nurseCount,
                    nurseGroup=lambda x: x.nurseHours.astype(str) + ', ' + x.nurseLevel.astype(str))\
