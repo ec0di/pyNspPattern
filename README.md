@@ -47,7 +47,7 @@ I generated some plotly plots as well, so you can visualize the results. Here ar
 </html>
 
 ## To implement this in real scenarios
-First of all, there are some limitations to the mode. We are taking advantage of only having 4 shifts types, which is not always the case. If the space of possible rosters become to large, this model won't work.
+First of all, there are some limitations to the model. We are taking advantage of only having 4 shifts types, which is not always the case. If the space of possible rosters become to large, this model won't work.
 
 Secondly, the constraints and objective measures of the model can vary from department to department. These would to be tweaked and perhaps made more generic, so a config file with constraints and objective measures could be supplied for each department.
 
@@ -57,5 +57,3 @@ Furthermore, more development would have to be done to include features such as
 * Holiday periods as part of plans.
 
 One could perhaps also use this as a simulation tool to get inspiration of how the patterns and a combined schedule could look like.
-
-## License
