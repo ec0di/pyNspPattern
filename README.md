@@ -38,9 +38,9 @@ Or it can find the near optimal solution in n * 3 minutes roughly.
 
 I created code to make plotly plots to visualize the results. Here are some examples for a 4-Weeks schedule:
 
-![image](./data/Optimized Schedule.png)
+![image](./data/OptimizedSchedule.png)
 
-![image](./data/Nurse Demand Surplus.png)
+![image](./data/NurseDemandSurplus.png)
 
 [Visualizations in interactive html format](https://ec0di.github.io/pyNspPattern/index.html)
 
