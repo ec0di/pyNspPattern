@@ -38,9 +38,9 @@ Or it can find the near optimal solution in n * 3 minutes roughly.
 
 I generated some plotly plots as well, so you can visualize the results. Here are some examples:
 
-[Link to HTML file](https://ec0di.github.io/pyNspPattern/4WeekRosterNurseDemandSurplus.html)
+[Link to HTML file](https://ec0di.github.io/pyNspPattern/index.html)
 
-<iframe src="https://ec0di.github.io/pyNspPattern/4WeekRosterNurseDemandSurplus.html" width="100%" height="300px"></iframe>
+<iframe src="https://ec0di.github.io/pyNspPattern/index.html" width="100%" height="300px"></iframe>
 
 
 ## To implement this in real scenarios
