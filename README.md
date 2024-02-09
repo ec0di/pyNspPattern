@@ -26,21 +26,23 @@ Note that the more static input parameters such as nurse demand and supply and n
 The program is based of my original work from my [Thesis](https://www.dropbox.com/s/p2memkka1tygggx/Main%20Thesis%20File.pdf?dl=0) from 2017 at DTU working together with Riget to optimize their nurse scheduling.
 Although at the time I never got Column Generation (CG) to work properly, I decided to give it another shot with patterns generated up front instead, which turns out to be quite effective.
 
-There are some slight changes to the CG model from the thesis, for instance I know only use 4 shifts types Off, Day, Evening and Night, instead of 7 from the thesis where it was Off + Day, Evening and Night for each nurse competence level (1 and 3).
+There are some slight changes to the CG model from the thesis. For instance, I only use 4 shifts types Off, Day, Evening and Night, instead of 7 that I used in the thesis where it was Off + Day, Evening and Night for each nurse competence level (1 and 3).
 
-This change made it possible to generate all rosters up front working with a 2 week period, and then I investigated how I could patch these together.
+This change made it possible to generate all rosters up front working with a 2-week period, and then I investigated how I could patch these together.
 
-Further explanation and results can be found in this [Google Sheet Presentation](https://docs.google.com/presentation/d/1Sd_SwZE5Q46sYWflUblwJZJwTlvCniZiViLc7QHK9A8/edit?usp=sharing).
+Further explanation and some results can be found in this [Google Sheet Presentation](https://docs.google.com/presentation/d/1Sd_SwZE5Q46sYWflUblwJZJwTlvCniZiViLc7QHK9A8/edit?usp=sharing).
 
 ## Results
 The speed of the program is the most impressive part. It can generate 2*n-week schedule for more than 55 nurses in less than n*5 seconds using Column Generation (a 20 pct gap from optimal solution).
 Or it can find the near optimal solution in n * 3 minutes roughly.
 
-I generated some plotly plots as well, so you can visualize the results. Here are some examples:
+I created code to make plotly plots to visualize the results. Here are some examples for a 4-Weeks schedule:
 
-[Link to HTML file](https://ec0di.github.io/pyNspPattern/index.html)
+![image](./data/Optimized Schedule.png)
 
-<iframe src="https://ec0di.github.io/pyNspPattern/index.html" width="100%" height="300px"></iframe>
+![image](./data/Nurse Demand Surplus.png)
+
+[Visualizations in interactive html format](https://ec0di.github.io/pyNspPattern/index.html)
 
 
 ## To implement this in real scenarios
