@@ -23,7 +23,7 @@ solution or column generation algorithm where you specify how long time you want
 Note that the more static input parameters such as nurse demand and supply and number of shift types are stored in input_parameters.py.
 
 ## How it works
-The program is based of my original work from my [Thesis](https://www.dropbox.com/s/p2memkka1tygggx/Main%20Thesis%20File.pdf?dl=0) from 2017 at DTU working together with Riget to optimize their nurse scheduling.
+The program is based of my original work from my [Thesis from 2017 at DTU](https://www.dropbox.com/s/p2memkka1tygggx/Main%20Thesis%20File.pdf?dl=0) working together with Riget to optimize their nurse scheduling.
 Although at the time I never got Column Generation (CG) to work properly, I decided to give it another shot with patterns generated up front instead, which turns out to be quite effective.
 
 There are some slight changes to the CG model from the thesis. For instance, I only use 4 shifts types Off, Day, Evening and Night, instead of 7 that I used in the thesis where it was Off + Day, Evening and Night for each nurse competence level (1 and 3).
